@@ -1,0 +1,91 @@
+---
+title: "GNP AR"
+author: "Di Zhang  118020518"
+date: "12/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L5")
+gnp=as_tibble(read.table("q-gnp4710.txt",header=T))
+names(gnp)=c('y','m','d','prc')
+library(dplyr)
+gnp=gnp %>% mutate(ret=log(prc)-log(dplyr::lag(prc,1))) %>% na.omit()
+library(zoo)
+gnp=gnp %>% mutate(date=as.yearmon(paste0(y,'-',m)))
+gnp=gnp %>% select(date,ret)
+head(gnp)
+```
+
+```{r}
+acf(gnp$ret,lag=12)
+pacf(gnp$ret,lag=12)
+arima(gnp$ret,c(3,0,0))
+```
+
+```{r}
+aic=NULL
+bic=NULL
+for (i in 0:12){
+  tmp=arima(gnp$ret,c(i,0,0))
+  aic=append(aic,AIC(tmp))
+  bic=append(bic,BIC(tmp))
+}
+plot((aic-min(aic))~seq(0,12,by=1),type='h')
+lines((aic-min(aic))~seq(0,12,by=1),lty=2)
+plot((bic-min(bic))~seq(0,12,by=1),type='h')
+lines((bic-min(bic))~seq(0,12,by=1),lty=2)
+```
+
+```{r}
+ar3=arima(gnp$ret,c(3,0,0))
+ar9=arima(gnp$ret,c(9,0,0))
+ar3
+ar9
+```
+
+```{r}
+const=rep(NA,10)
+const[4:8]=0
+ar9.new=arima(gnp$ret,c(9,0,0),fixed=const)
+ar9.new
+```
+
+```{r}
+Box.test(ar3$residuals,lag=12)
+Box.test(ar9$residuals,lag=12)
+Box.test(ar9.new$residuals,lag=12)
+```
+
+```{r}
+gnp.f=gnp %>% mutate(pred=ret,up=ret,down=ret)
+model=arima(gnp$ret,c(3,0,0))
+mpred=predict(model,n.ahead=12)
+library(lubridate)
+dat=seq(as.Date(last(gnp$date))+months(3),by='quarter',length=12)
+pr=data.frame(date=as.yearmon(dat),
+              ret=NA,
+              pred=mpred$pred)
+pr=pr %>% mutate(up=pred+2*mpred$se,
+              down=pred-2*mpred$se)
+head(pr)
+```
+
+```{r}
+pre=rbind(gnp.f,pr)
+pre=pre %>% filter(date>='2008-01-01')
+plot(pre$pred~pre$date,type='l',col='red',ylim=range(pre[,2:5],na.rm=T))
+lines(pre$up~pre$date,lty=2)
+lines(pre$down~pre$date,lty=2)
+lines(pre$ret~pre$date,lty=1,col='black')
+```
+
+```{r}
+library(fUnitRoots)
+adfTest(gnp$ret)
+```
+

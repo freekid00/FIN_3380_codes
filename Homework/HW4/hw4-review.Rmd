@@ -1,0 +1,111 @@
+---
+title: "Untitled"
+author: "Di Zhang  118020518"
+date: "12/12/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+load("/Users/zhangdi/FIN 3380/Homework/HW4/ind.g.price.RData")
+ind=ind.g.price
+names(ind)=c("permno","date","prc")
+library(dplyr)
+ind=ind %>% group_by(permno) %>% mutate(ret=prc/lag(prc,1)-1) %>% na.omit() %>% ungroup() %>% select(permno,date,ret)
+library(tidyr)
+ind=spread(ind,permno,ret)
+ind=ind %>% na.omit(`150036`,`153435`)
+ind=gather(ind,permno,ret,-date)
+head(ind)
+```
+
+```{r}
+f=ind %>% filter(permno=='150036')
+c=ind %>% filter(permno=='153435')
+inv=1e6
+# gau
+q5=qnorm(0.05)
+f.mu=mean(f$ret)
+f.sigma=sd(f$ret)
+f.var=-inv*(f.mu+f.sigma*q5)
+c.mu=mean(c$ret)
+c.sigma=sd(c$ret)
+c.var=-inv*(c.mu+c.sigma*q5)
+f.var
+c.var
+# his
+f.var.his=-inv*quantile(f$ret,0.05,type=3)
+c.var.his=-inv*quantile(c$ret,0.05,type=3)
+f.var.his
+c.var.his
+# gau es
+f.es=inv*(f.mu+f.sigma*dnorm(qnorm(0.05))/0.05)
+c.es=inv*(c.mu+c.sigma*dnorm(qnorm(0.05))/0.05)
+f.es
+c.es
+# his es
+f=f %>% mutate(pl=ret*inv,signal=ifelse(pl<=(-f.var.his),1,NA),pl.k=signal*pl)
+f.es.his=-mean(f$pl.k,na.rm=T)
+c=c %>% mutate(pl=ret*inv,signal=ifelse(pl<=(-c.var.his),1,NA),pl.k=signal*pl)
+c.es.his=-mean(c$pl.k,na.rm=T)
+f.es.his
+c.es.his
+```
+
+```{r}
+#portfolio
+port=ind %>% group_by(permno) %>% arrange(date) %>% mutate(cumret=cumprod(ret+1)) %>% ungroup() %>%
+  group_by(date) %>% summarise(cum=mean(cumret)) %>% ungroup() %>% arrange(date) %>% 
+  mutate(ret=cum/lag(cum,1)-1,ret=ifelse(is.na(ret),cum-1,ret))
+head(port)
+p.mu=mean(port$ret)
+p.sigma=sd(port$ret)
+q5=qnorm(0.05)
+p.var=-inv*(p.mu+p.sigma*q5)
+p.es=inv*(p.mu+p.sigma*dnorm(qnorm(0.05))/0.05)
+p.var
+p.es
+```
+
+```{r}
+load("/Users/zhangdi/FIN 3380/Homework/HW4/ind.g.price.RData")
+ind=ind.g.price
+names(ind)=c("permno","date","prc")
+ind=spread(ind,permno,prc)
+ind=ind %>% na.omit()
+ind=gather(ind,permno,prc,-date)
+head(ind)
+f=ind %>% filter(permno=='153435')
+c=ind %>% filter(permno=='150036')
+f=f %>% mutate(dn=(prc-cummax(prc))/cummax(prc))
+c=c %>% mutate(dn=(prc-cummax(prc))/cummax(prc))
+plot(f$dn~f$date,type='l',col='red')
+lines(c$dn~c$date,lty=1,col='blue')
+```
+
+```{r}
+c=c %>% mutate(sig=ifelse(dn<0,1,0))
+c.rles=rle(c$sig)
+max(c.rles$length[c.rles$values==1])
+```
+
+```{r}
+c$sig=NULL
+cf=c %>% left_join(f,by='date')
+cf=cf %>% mutate(codown=pmax(dn.x,dn.y),sig=ifelse(codown<0,1,0))
+sum(cf$sig)/nrow(cf)
+
+cf=cf %>% mutate(anydown=pmin(dn.x,dn.y),zero=0)
+plot(cf$dn.x~cf$date,type='l',col='red',ylim=range(cf$dn.x,cf$dn.y))
+lines(cf$dn.y~cf$date,lty=1,col='blue')
+with(cf,polygon(c(date,rev(date)),c(zero,rev(anydown)),col=rgb(0,0,0,0.1)))
+with(cf,polygon(c(date,rev(date)),c(zero,rev(codown)),col=rgb(0,0,0,0.5)))
+```
+
+```{r}
+sum(cf$codown)/sum(cf$anydown)
+```
+

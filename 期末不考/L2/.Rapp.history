@@ -1,0 +1,4 @@
+load("/Users/zhangdi/FIN 3380/L2/ret.all.RData")
+ret.all
+load("/Users/zhangdi/FIN 3380/L2/mystock.Rdata")
+mystock

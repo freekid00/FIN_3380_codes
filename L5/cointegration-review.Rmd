@@ -1,0 +1,113 @@
+---
+title: "cointegration"
+author: "Di Zhang  118020518"
+date: "12/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L5")
+load("crsp.sample.RData")
+cs=crsp.sample
+library(dplyr)
+cs=cs %>% select(permno,date,prc)
+cs=cs %>% mutate(prc=log(abs(prc)))
+head(cs)
+```
+
+```{r}
+permno=unique(cs$permno)
+com=as.data.frame(t(combn(permno,2)))
+```
+
+```{r}
+#ceshi1=cs %>% filter(permno %in% c(com$V1[1],com$V2[1]))
+ceshi1=cs[which(cs$permno %in% c(com$V1[1],com$V2[1])),]
+library(tidyr)
+ceshi1=spread(ceshi1,permno,prc)
+ceshi1=ceshi1[,2:3]
+library(urca)
+tmp=ca.jo(ceshi1)
+tmp=summary(tmp)
+r=data.frame(stock1=com$V1[1],
+             stock2=com$V2[1],
+             test=tmp@teststat[2])
+r[,c('pct10','pct5','pct1')]=tmp@cval[2,]
+r
+```
+
+```{r}
+jtest=function(stock1,stock2,df){
+  ce=df[which(df$permno %in% c(stock1,stock2)),]
+  ce=spread(ce,permno,prc)
+  ce=ce[,2:3]
+  ce=summary(ca.jo(ce))
+  r=data.frame(stock_1=stock1,stock_2=stock2,test=ce@teststat[2])
+  r[,c('pct10','pct5','pct1')]=ce@cval[2,]
+  return(r)
+}
+jtest(com$V1[1],com$V2[1],cs)
+```
+
+```{r}
+library(doParallel)
+library(forecast)
+detectCores(all.tests = FALSE,logical = TRUE)
+registerDoParallel(cores=8)
+```
+
+```{r}
+stat=foreach(i=1:nrow(com),.combine=rbind,.packages=c("urca","tidyr")) %dopar% jtest(com$V1[i],com$V2[i],cs)
+stat[order(-stat$test),]
+cho=stat %>% filter(test>pct1)
+gp=cs[which(cs$permno %in% c(cho$stock_1[1],cho$stock_2[1])),]
+gp=spread(gp,permno,prc)
+tmp=lm(gp$`39731`~gp$`83148`)
+gp$spread=tmp$residuals
+sd1=sd(gp$spread)
+gp=gp %>% mutate(signal=ifelse(spread>sd1,-1,1),ret=spread-dplyr::lag(spread,1),actualret=ret*dplyr::lag(signal,1)) %>% na.omit()
+gp=gp %>% mutate(cumret=cumsum(actualret))
+plot(gp$cumret~gp$date,type='l')
+head(gp)
+```
+
+```{r}
+gp=cs[which(cs$permno %in% c(cho$stock_1[1],cho$stock_2[1])),]
+gp=spread(gp,permno,prc)
+tmp=lm(gp$`39731`~gp$`83148`)
+gp$spread=tmp$residuals
+tmp=arima(gp$spread,c(1,0,0))
+err=sqrt(tmp$sigma2)
+gp=gp %>% mutate(pred=spread*tmp$coef[1],dif=spread-lag(pred,1),signal=ifelse(dif>err,-1,1),ret=spread-lag(spread,1),
+                 actualret=ret*lag(signal,1)) %>% na.omit() %>% mutate(cum=cumsum(actualret))
+plot(gp$cum~gp$date,type='l')
+head(gp)
+```
+
+```{r}
+gp=cs[which(cs$permno %in% c(cho$stock_1[1],cho$stock_2[1])),]
+gp=spread(gp,permno,prc)
+est=lm(gp$`39731`~gp$`83148`,data=gp[1100,])
+gp=gp %>% mutate(spread=gp$`39731`-(est$coefficients[1]+est$coefficients[2]*gp$`83148`))
+gp=gp[1101:nrow(gp),]
+sd=sd(gp$spread)
+gp=gp %>% mutate(signal=ifelse(spread>sd,-1,1),ret=spread-lag(spread,1),actualret=ret*lag(signal,1)) %>% na.omit() %>%
+  mutate(cum=cumsum(actualret))
+plot(gp$cum~gp$date,type='l')
+head(gp)
+```
+
+```{r}
+sharp_ratio=mean(gp$actualret)*sqrt(252)/sd(gp$actualret)
+sharp_ratio
+```
+
+```{r}
+gp=gp %>% mutate(dn=((cum+1)-cummax(cum+1))/cummax(cum+1))
+plot(gp$dn~gp$date,type='l')
+```
+

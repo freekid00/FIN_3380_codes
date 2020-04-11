@@ -1,0 +1,157 @@
+---
+title: "HW4"
+author: "Di Zhang  118020518"
+date: "11/4/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Q1
+## Q1(a)
+### the distribution of our portfolio return is normal distribution with 
+$\mu_p=0.5\mu_A+0.5\mu_B$
+
+$\sigma_p^2=0.25\sigma_A^2+0.25\sigma_B^2+0.5\sigma_A\sigma_B\rho_{AB}$
+
+## Q1(b)
+$VaR_\alpha^p=-(\sigma_pZ_\alpha+\mu)*I$
+
+$since$ $\sigma_p=\sqrt{0.25\sigma_A^2+0.25\sigma_B^2+0.5\sigma_A\sigma_B\rho_{AB}}$
+
+$\mu_p=0.5\mu_A+0.5\mu_B$
+
+$so$ $VaR_\alpha^p=-(\sqrt{0.25\sigma_A^2+0.25\sigma_B^2+0.5\sigma_A\sigma_B\rho_{AB}}Z_\alpha+0.5\mu_A+0.5\mu_B)*I$
+
+## Q1(c)
+that is to show $$\eta(0.5A+0.5B)\leq\eta(0.5A)+\eta(0.5B)=0.5\eta(A)+0.5\eta(B)$$
+so $$-(\sqrt{0.25\sigma_A^2+0.25\sigma_B^2+0.5\sigma_A\sigma_B\rho_{AB}}Z_\alpha+0.5\mu_A+0.5\mu_B)*I\leq-0.5(\sigma_AZ_\alpha+\mu_A)*I-0.5(\sigma_BZ_\alpha+\mu_B)*I $$
+so $$0.25\sigma_A^2+0.25\sigma_B^2+0.5\sigma_A\sigma_B\rho_{AB}\leq(0.5\sigma_A+0.5\sigma_B)^2$$
+which is trivial since $$\rho_{AB}\leq1$$
+
+# Q2
+## obtain data
+```{r}
+library(dplyr)
+load('/Users/zhangdi/FIN 3380/ind.g.price.RData')
+a=ind.g.price
+names(a)=c('permno','date','prc')
+ftse=a %>% filter(permno==150036) %>% mutate(date=as.Date(date)) %>% arrange(date) %>% 
+  mutate(ret=prc/lag(prc,1)-1) %>% filter(!is.na(ret)) %>%
+  filter(substr(date,1,4)>='2014'&substr(date,1,4)<='2018')
+csi=a %>% filter(permno==153435) %>% mutate(date=as.Date(date)) %>% arrange(date) %>% 
+  mutate(ret=prc/lag(prc,1)-1) %>% filter(!is.na(ret)) %>%
+  filter(substr(date,1,4)>='2014'&substr(date,1,4)<='2018')
+```
+
+## Q2(a)
+```{r}
+I=1e6
+cat('for FTSE 350: ','\n')
+q=qnorm(0.05)
+mu=mean(ftse$ret,na.rm=T)
+sigma=sd(ftse$ret,na.rm=T)
+cat('Gaussian Var is ',Gaussian_var=-(q*sigma+mu)*I,'\n')
+his=quantile(ftse$ret,probs=0.05,type=3)
+cat('Historical Var is',-I*his,'\n')
+Gaussian_ES=I*(mu+sigma*dnorm(qnorm(0.05))/0.05)
+cat('Gaussian ES is ',Gaussian_ES,'\n')
+ftse=ftse %>% mutate(cho=ret*I,num=ifelse(cho<(I*his),1,NA),num=num*cho)
+His_ES=-mean(ftse$num,na.rm=T)
+cat('Historical ES is ',His_ES,'\n')
+cat('for CSI 300: ','\n')
+q=qnorm(0.05)
+mu=mean(csi$ret,na.rm=T)
+sigma=sd(csi$ret,na.rm=T)
+Gaussian_Var=-(q*sigma+mu)*I
+cat('Gaussian Var is ',Gaussian_Var,'\n')
+His_Var=-I*quantile(csi$ret,probs=0.05,type=3,na.rm=T)
+cat('Historical Var is',His_Var,'\n')
+Gaussian_ES=I*(mu+sigma*dnorm(qnorm(0.05))/0.05)
+cat('Gaussian ES is ',Gaussian_ES,'\n')
+csi=csi %>% mutate(cho=ret*I,num=ifelse(cho<(-His_Var),1,NA),num=num*cho)
+His_ES=-mean(csi$num,na.rm=T)
+cat('Historical ES is ',His_ES)
+
+```
+
+## Q2(b)
+```{r}
+ftse1=ftse %>% select(date,ret)
+names(ftse1)=c('date','ftseret')
+csi1=csi %>% select(date,ret)
+names(csi1)=c('date','csiret')
+portfolio=merge(ftse1,csi1,by='date',all.x=F,all.y=F)
+portfolio=portfolio %>% mutate(ret=0.5*ftseret+0.5*csiret)
+I=1e6
+mu=mean(portfolio$ret)
+sigma=sd(portfolio$ret)
+Gaussian_Var=-(qnorm(0.05)*sigma+mu)*I
+cat('Gaussian Var is',Gaussian_Var,'\n')
+Gaussian_ES=I*(mu+sigma*dnorm(qnorm(0.05))/0.05)
+cat('Gaussian ES is',Gaussian_ES,'\n')
+His_Var=-I*quantile(portfolio$ret,probs=0.05,type=3)
+cat('Historical Var is',His_Var,'\n')
+portfolio=portfolio %>% mutate(cho=ret*I,num=ifelse(cho<(-His_Var),1,NA),num=num*cho)
+His_ES=-mean(portfolio$num,na.rm=T)
+cat('Historical ES is',His_ES,'\n')
+cat('conclusion: the subadditivity is satisfied!')
+```
+
+## Q2(c)
+```{r}
+library(zoo)
+library(tidyr)
+library(ggplot2)
+ftse=ftse %>% mutate(dd=(prc-cummax(prc))/cummax(prc))
+p=ftse %>% mutate(dd=(prc-cummax(prc))/cummax(prc)) %>%
+  ggplot(aes(x=date,y=dd))+geom_line()+theme_bw()+labs(title='FTSE 350',x='date',y='Drawdown')
+print(p)
+csi=csi %>% mutate(dd=(prc-cummax(prc))/cummax(prc))
+p=csi %>% mutate(dd=(prc-cummax(prc))/cummax(prc)) %>%
+  ggplot(aes(x=date,y=dd))+geom_line()+theme_bw()+labs(title='CSI 300',x='date',y='Drawdown')
+print(p)
+dd.ftse.max=max(-ftse$dd)
+dd.csi.max=max(-csi$dd)
+ftse=ftse %>% mutate(flag=ifelse(dd<0,1,0))
+ftserle=rle(ftse$flag==1)
+longgestftse=max(ftserle$lengths[ftserle$values==TRUE])
+csi=csi %>% mutate(flag=ifelse(dd<0,1,0))
+csirle=rle(csi$flag==1)
+longgestcsi=max(csirle$lengths[csirle$values==1])
+cat('The longgest drawdown duration for FTSE 350 is',longgestftse/252,'years','\n' )
+cat('The longgest drawdown duration for CSI 300 is',longgestcsi/252,'years','\n')
+cat('The max value for FTSE 350 drawdown is',dd.ftse.max,'\n')
+cat('The max value for FTSE 350 drawdown is',dd.csi.max,'\n')
+```
+
+## Q2(d)
+```{r}
+portfolio=portfolio %>% mutate(cum=cumprod(ret+1),dd=(cum-cummax(cum))/cummax(cum)) 
+p=portfolio %>% ggplot(aes(x=date,y=dd))+geom_line()+theme_bw()+labs(title='Portfolio',x='date',y='Drawdown')
+print(p)
+portfolio=portfolio %>% mutate(flag=ifelse(dd<0,1,0))
+max.p=max(-portfolio$dd)
+prle=rle(portfolio$flag==1)
+longgestp=max(prle$lengths[prle$values==TRUE])
+cat('The max drawdown for portfolio is:',max.p,'\n')
+cat('The longgest drawdown period for portfolio is:',longgestp/252,'years','\n')
+cat('conclusion: The drawdown and drawdown period is between each permno')
+```
+
+# Q3
+```{r}
+a=portfolio %>% select(date,ftseret,csiret)
+a=a %>% mutate_at(vars(ftseret,csiret),list(cum=~cumprod(.+1))) %>%
+  mutate_at(vars(ftseret_cum,csiret_cum),list(dd=~(.-cummax(.))/cummax(.))) %>%
+  mutate(anydown=pmin(ftseret_cum_dd,csiret_cum_dd),
+         codown=pmax(ftseret_cum_dd,csiret_cum_dd))
+neg=a %>% filter(ftseret<0 & csiret<0)
+cat('the probability that returns of the two indices are both negative in one day is',
+    length(neg$date)/length(a$date),'\n')
+codd=sum(a$codown)/sum(a$anydown)
+cat('the co-drawdown is:',codd,'\n')
+```
+

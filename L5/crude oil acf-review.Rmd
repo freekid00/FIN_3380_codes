@@ -1,0 +1,54 @@
+---
+title: "crude oil"
+author: "Di Zhang  118020518"
+date: "12/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L5")
+crude=read.csv('crude_oil.csv')
+names(crude)=c('date','prc')
+library(dplyr)
+crude=crude %>% mutate(date=as.Date(date),ret=log(prc)-log(dplyr::lag(prc,1))) %>% na.omit()
+head(crude)
+```
+
+```{r}
+crude.acf=acf(crude$ret,lag=12)
+plot(crude.acf)
+```
+
+```{r}
+library(forecast)
+rst=auto.arima(crude$ret)
+plot(forecast(rst,20))
+```
+
+```{r}
+library(fUnitRoots)
+adfTest(crude$prc)
+adfTest(crude$ret)
+```
+
+```{r}
+all=NULL
+for (p in 0:1){
+  for (q in 0:2){
+    tmp=arima(crude$ret,c(p,0,q))
+    model=c(p,q,AIC(tmp))
+    all=rbind(all,model)
+  }
+}
+all=as.data.frame(all)
+all[which(all$V3==min(all$V3)),]
+```
+
+```{r}
+plot(forecast(arima(crude$ret,c(1,0,0)),5))
+```
+

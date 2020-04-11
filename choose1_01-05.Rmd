@@ -1,0 +1,365 @@
+---
+title: "Untitled"
+author: "Di Zhang  118020518"
+date: "1/5/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rsi=function(a){
+  a=a %>% select(date,prc) %>% arrange(date) %>% mutate(delta=prc-lag(prc,1),up=ifelse(delta>0,1,0),down=ifelse(delta<0,1,0)) %>%
+    mutate(up=delta*up,down=-delta*down) %>%     mutate(upa=rollmean(up,k=14,fill=NA,align='right',na.rm=T),downa=rollmean(down,k=14,fill=NA,align='right',na.rm=T))
+  for (t in 15:length(a$date)){
+    a$upa[t]=a$upa[t-1]*13/14+a$up[t]/14
+    a$downa[t]=a$downa[t-1]*13/14+a$down[t]/14
+  }
+  a=a %>% mutate(rs=upa/downa) %>% mutate(rsi=100-100/(1+rs))
+  return(a)
+}
+
+#plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+#abline(h=c(30,70),col='red')
+```
+
+```{r}
+bb=function(a){
+  a=a %>% select(date,prc) %>% arrange(date) %>% 
+    mutate(date=as.Date(date),avg=rollmean(prc,k=20,fill=NA,align='right')) %>% 
+    mutate(sd=rollapply(prc,width=20,fill=NA,align='right',FUN=sd,na.rm=T)) %>% filter(!is.na(avg)) %>% mutate(up=avg+2*sd,down=avg-2*sd)
+  return(a)
+}
+
+plot(a$prc~a$date,type='l',ylab='prc',xlab='date',main='bb',ylim=range(a[,c('prc','up','down')]))
+lines(a$avg~a$date,col='blue')
+lines(a$up~a$date,col='red')
+lines(a$down~a$date,col='red')
+legend('bottomright',c('prc','avg','up','down'),lty=c(1,1,1,1),col=c('black','blue','red','red'))
+```
+
+```{r}
+setwd('/Users/zhangdi/Downloads')
+```
+
+```{r}
+enjie=read_csv('enjie.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+enjie=enjie %>% filter(date>='2019-07-09')
+plot(enjie$prc~enjie$date,type='l')
+
+rsi=function(a){
+  a=a %>% select(date,prc) %>% arrange(date) %>% mutate(delta=prc-lag(prc,1),up=ifelse(delta>0,1,0),down=ifelse(delta<0,1,0)) %>%
+    mutate(up=delta*up,down=-delta*down) %>%     mutate(upa=zoo::rollmean(up,k=14,fill=NA,align='right',na.rm=T),downa=zoo::rollmean(down,k=14,fill=NA,align='right',na.rm=T))
+  for (t in 15:length(a$date)){
+    a$upa[t]=a$upa[t-1]*13/14+a$up[t]/14
+    a$downa[t]=a$downa[t-1]*13/14+a$down[t]/14
+  }
+  a=a %>% mutate(rs=upa/downa) %>% mutate(rsi=100-100/(1+rs))
+  return(a)
+}
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('300327_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#华体科技
+enjie=read_csv('603679_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('000001_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('603659_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#捷捷微电
+enjie=read_csv('300623_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+enjie=enjie %>% filter(date>='2019-04-11')
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('002409_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#中国平安
+enjie=read_csv('601318_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('002747_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+enjie=rbind(enjie[1:399,],enjie[410:nrow(enjie),])
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('300398_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#兴业银行
+enjie=read_csv('601166_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#浙江广厦
+enjie=read_csv('600052_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+enjie=enjie %>% filter(date>='2019-09-11')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#华夏幸福
+enjie=read_csv('600340_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#国瓷材料
+enjie=read_csv('300285_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+enjie=enjie %>% filter(date>='2019-04-03')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#广宇发展
+enjie=read_csv('000537_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('601155_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+enjie=enjie %>% filter(date>='2019-07-10')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('000002_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#拓斯达
+enjie=read_csv('300607_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+enjie=rbind(enjie[1:450,],enjie[454:nrow(enjie),])
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#美的集团
+enjie=read_csv('000333_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+which(enjie$prc==0)
+enjie=rbind(enjie[1:322,],enjie[333:nrow(enjie),])
+enjie=rbind(enjie[1:271,],enjie[273:nrow(enjie),])
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+#新宙邦
+enjie=read_csv('300037_SZE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('603806_SHE.csv')
+library(dplyr)
+enjie=cbind(enjie[,2],enjie[,6])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+```{r}
+enjie=read_csv('指数行情_399417.csv')
+library(dplyr)
+enjie=cbind(enjie[,3],enjie[,7])
+names(enjie)=c('date','prc')
+enjie=enjie %>% mutate(date=as.Date(date),prc=as.numeric(prc))
+enjie=enjie %>% arrange(date)
+plot(enjie$prc~enjie$date,type='l')
+a=rsi(enjie)
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+

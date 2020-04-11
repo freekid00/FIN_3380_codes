@@ -1,0 +1,59 @@
+---
+title: "drawdown"
+author: "Di Zhang  118020518"
+date: "12/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L3")
+see=read.csv('SH000001.csv')
+names(see)=c('date','idx','ret')
+library(zoo)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+see$date=as.yearmon(see$date)
+head(see)
+```
+
+```{r}
+see=see %>% mutate_at(vars(idx),list(dn=~(.-cummax(.))/cummax(.)))
+plot(see$dn~see$date,type='l')
+see=see %>% mutate(signal=ifelse(dn<0,1,0))
+rles=rle(see$signal)
+max(rles$lengths[rles$values==1])
+head(see)
+summary(rles$lengths[rles$values==1])/12
+#calmar ratio
+mean(see$ret)*12/max(-see$dn)
+```
+
+```{r}
+load('eq.bond.RData')
+eb=eq.bond %>% select(date,sp500,bond10y)
+names(eb)=c('date','sp','bond')
+eb=eb %>% mutate_at(vars(sp,bond),list(cumret=~cumprod(.+1))) %>% mutate(yy=substr(date,1,4)) %>% group_by(yy) %>%
+  arrange(date) %>% summarise(sp_cum=last(sp_cumret),bond_cum=last(bond_cumret)) %>% ungroup()
+eb=eb %>% mutate_at(vars(sp_cum,bond_cum),list(dn=~(.-cummax(.))/cummax(.))) %>% mutate(zero=0)
+plot(eb$sp_cum_dn~eb$yy,type='l',col='blue')
+lines(eb$bond_cum_dn~eb$yy,lty=1,col='red')
+head(eb)
+```
+
+```{r}
+eb=eb %>% mutate(anydown=pmin(sp_cum_dn,bond_cum_dn),codown=pmax(sp_cum_dn,bond_cum_dn))
+plot(eb$sp_cum_dn~eb$yy,type='l',col='blue')
+lines(eb$bond_cum_dn~eb$yy,lty=1,col='red')
+with(eb,polygon(c(yy,rev(yy)),c(zero,rev(anydown)),col=rgb(0,0,0,0.1)))
+with(eb,polygon(c(yy,rev(yy)),c(zero,rev(codown)),col=rgb(0,0,0,0.5)))
+```
+
+```{r}
+sum(eb$codown)/sum(eb$anydown)
+```
+

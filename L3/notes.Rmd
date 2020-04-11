@@ -1,0 +1,111 @@
+---
+title: "l3"
+author: "Di Zhang  118020518"
+date: "10/29/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Gaussian VaR
+```{r}
+setwd('/Users/zhangdi/FIN 3380/L3')
+library(dplyr)
+load('crsp.ew.RData')
+a=crsp.ew %>% filter(substr(date,1,4)=='2013')
+i=1e6
+mu=mean(a$ret)
+sigma=sd(a$ret)
+q1=qnorm(0.01)
+q5=qnorm(0.05)
+var1=-i*(sigma*q1+mu)
+var1
+var5=-i*(sigma*q5+mu)
+var5
+# -(sigma * q + mu) * invest
+```
+
+# Historical VaR
+```{r}
+load('crsp.ew.RData')
+a=crsp.ew %>% filter(substr(date,1,4)=='2013')
+i=1e6
+v1=-i*quantile(a$ret,probs=0.01,type=3,na.rm=T)
+v5=-i*quantile(a$ret,probs=0.05,type=3,na.rm=T)
+v1
+v5
+# quantile use type 3
+```
+
+```{r}
+load('crsp.ew.RData')
+a=crsp.ew %>% filter(substr(date,1,4)=='2013')
+ret=density(a$ret)
+x=seq(min(a$ret),max(a$ret),length=1000)
+y=dnorm(x,mu,sigma)
+plot(ret)
+lines(x,y,lty=3)
+```
+
+# Gaussian ES
+```{r}
+load('crsp.ew.RData')
+a=crsp.ew %>% filter(substr(date,1,4)=='2013')
+i=1e6
+e1=i*(mu+sigma*dnorm(qnorm(0.01))/0.01)
+e5=i*(mu+sigma*dnorm(qnorm(0.05))/0.05)
+e1
+e5
+# i*(mu+sigma*dnorm(qnorm(alpha))/alpha)
+```
+
+# Historical ES
+```{r}
+load('crsp.ew.RData')
+a=crsp.ew %>% filter(substr(date,1,4)=='2013') %>% select(date,ret)
+i=1e6
+v1=-i*quantile(a$ret,probs=0.01,type=3,na.rm=T)
+v5=-i*quantile(a$ret,probs=0.05,type=3,na.rm=T)
+a$ret=a$ret*i
+a1=a[which(a$ret<=-v1),]
+es1=-mean(a1$ret)
+es1
+a5=a[which(a$ret<=-v5),]
+es5=-mean(a5$ret)
+es5
+```
+
+# drawdowns
+```{r}
+library(zoo)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+s=read.csv('SH000001.csv')
+s$Month=as.yearmon(s$Month)
+colnames(s)=c('date','idx','ret')
+s=s %>% arrange(date) %>% mutate(dd=(idx-cummax(idx))/cummax(idx))
+plot(s$dd~s$date,type='l')
+```
+
+# co-drawdown
+```{r}
+load('eq.bond.RData')
+a=eq.bond
+a=a %>% select(date,sp500,bond10y) %>% mutate(date=as.Date(date))
+a=a %>% mutate_at(vars(sp500,bond10y),list(cumret=~cumprod(.+1)))
+a=a  %>% mutate(year=format(date,"%Y")) %>% group_by(year) %>% summarise_at(vars(sp500_cumret,bond10y_cumret),list(~last(.))) %>%
+  ungroup()
+a=a %>% mutate_at(vars(sp500_cumret,bond10y_cumret),list(dd=~(.-cummax(.))/cummax(.)))
+plot(a$sp500_cumret_dd~a$year,type='l',col='blue')
+lines(a$bond10y_cumret_dd~a$year,col='red')
+a=a %>% mutate(anydown=pmin(sp500_cumret_dd,bond10y_cumret_dd),codown=pmax(sp500_cumret_dd,bond10y_cumret_dd))
+a=a %>% mutate(zeroline=0)
+plot(a$sp500_cumret_dd~a$year,type='l',col='blue')
+lines(a$bond10y_cumret_dd~a$year,col='red')
+with(a,polygon(c(year,rev(year)),c(zeroline,rev(anydown)),col=rgb(0,0,0,0.1)))
+with(a,polygon(c(year,rev(year)),c(zeroline,rev(codown)),col=rgb(0,0,0,0.5)))
+```
+

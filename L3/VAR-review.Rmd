@@ -1,0 +1,55 @@
+---
+title: "VAR"
+author: "Di Zhang  118020518"
+date: "12/9/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L3")
+library(dplyr)
+```
+
+```{r}
+load("crsp.ew.RData")
+crsp.ew=crsp.ew %>% mutate(date=as.Date(date)) %>% select(date,ret)
+crsp.ew=crsp.ew %>% filter(substr(date,1,4)=='2013')
+head(crsp.ew)
+```
+
+```{r}
+invest=1e6
+# gaussian var
+mu=mean(crsp.ew$ret)
+sigma=sd(crsp.ew$ret)
+q1=qnorm(0.01)
+q5=qnorm(0.05)
+gv1=-(mu+sigma*q1)*invest
+gv2=-(mu+sigma*q5)*invest
+gv1
+gv2
+# his var
+hv1=-invest*quantile(crsp.ew$ret,probs=0.01,type=3,na.rm=T)
+hv5=-invest*quantile(crsp.ew$ret,probs=0.05,type=3,na.rm=T)
+hv1
+hv5
+# gaussian es
+ges1=invest*(mu+sigma*dnorm(qnorm(0.01))/0.01)
+ges5=invest*(mu+sigma*dnorm(qnorm(0.05))/0.05)
+ges1
+ges5
+# his es
+crsp.ew$pl=crsp.ew$ret*invest
+crsp.ew=crsp.ew %>% mutate(dum1=ifelse(pl<=(-hv1),1,NA),dum5=ifelse(pl<=(-hv5),1,NA),dum1=dum1*pl,dum5=dum5*pl)
+hes1=-mean(crsp.ew$dum1,na.rm=T)
+hes5=-mean(crsp.ew$dum5,na.rm=T)
+hes1
+hes5
+
+## gaussian var 前加负号，es前不加负号。his 都加负号。
+```
+

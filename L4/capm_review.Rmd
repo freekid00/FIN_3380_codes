@@ -1,0 +1,65 @@
+---
+title: "capm_review"
+author: "Di Zhang  118020518"
+date: "12/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L4")
+load('crsp.beta.RData')
+cb=crsp.beta
+library(dplyr)
+cb=cb %>% mutate(date=as.Date(date)) %>% dplyr::filter(date>'2008-01-01'&date<'2011-01-01')
+head(cb)
+```
+
+```{r}
+library(tidyr)
+cb=spread(cb,permno,ret)
+dt=cb$date
+cb$date=NULL
+library(timeSeries)
+cb=as.timeSeries(cb)
+head(cb)
+```
+
+```{r}
+library(fPortfolio)
+cb1=portfolioFrontier(data=cb)
+cb2=minvariancePortfolio(data=cb)
+weight=cb2@portfolio@portfolio$weights
+weight
+```
+
+```{r}
+wt=matrix(weight,length(weight))
+cb=as.matrix(cb)
+cb=cb %*% wt
+cb=as.data.frame(cb)
+cb$date=dt
+names(cb)=c('ret','date')
+library(zoo)
+cb=cb %>% mutate(date=as.yearmon(date))
+tail(cb)
+```
+
+```{r}
+load('ff.RData')
+ff=ff %>% select(date,rf,rmxrf) %>% dplyr::filter(date>='2008-01-01'&date<'2011-01-01') %>% mutate(date=as.yearmon(date))
+cb=cb %>% left_join(ff,by='date') %>% mutate(ret_rf=ret-rf)
+head(cb)
+```
+
+```{r}
+li=cb %>% select(date,ret_rf,rmxrf)
+capm=lm(li$ret_rf~li$rmxrf)
+summary(capm)
+capm$coefficients[1]
+capm$coefficients[2]
+```
+

@@ -1,0 +1,24 @@
+---
+title: "chap1-1"
+author: "Di Zhang  118020518"
+date: "1/7/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(fBasics)
+setwd('/Users/zhangdi/financial time series/AFTS')
+load('crsp.sample.rdata')
+c=crsp.sample
+library(dplyr)
+head(c)
+c=c %>% filter(permno==11600)
+ret=c$ret*100
+basicStats(ret)
+#skewness<0:右偏
+```
+

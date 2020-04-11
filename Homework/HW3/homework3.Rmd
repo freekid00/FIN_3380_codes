@@ -1,0 +1,258 @@
+---
+title: "Honework3"
+author: "Di Zhang  118020518"
+date: "9/30/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Q2
+### (a) What are the weights of each asset in “2012-03”?
+```{r}
+library(dplyr)
+library(tidyr)
+#since BABA started trading after 2014, so the weight of BABA is always 0.
+load('/Users/zhangdi/FIN 3380/L2/ret.all.rdata')
+crsp.sample=ret.all
+crsp.sample=crsp.sample %>% select(permno,date,ret)
+crsp.sample=crsp.sample %>% filter(permno!=14888)
+crsp.sample.wide=spread (crsp.sample,key=permno,value=ret)
+crsp.sample=gather(crsp.sample.wide,key=permno,value=ret,-date)
+crsp.sample=crsp.sample %>% mutate(ret=ifelse(is.na(ret),0,ret))
+crsp.sample=crsp.sample %>% filter(date>='2012-01-01')
+crsp.sample=crsp.sample %>% mutate(date=as.character(date)) %>%
+  mutate(yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>%
+  mutate(sd=sd(ret)) %>% ungroup()
+sd_change=crsp.sample %>% select(permno,yymm,sd) %>%
+  group_by(permno,yymm) %>% summarise(sd=first(sd)) %>% mutate(sd=lag(sd,1)) %>%
+  filter(!is.na(sd)) %>%
+  group_by(yymm) %>% mutate(wgt=(1/sd)/sum(1/sd)) %>% ungroup()
+crsp.sample$sd=NULL
+crsp.sample=left_join(crsp.sample,sd_change,by=c('permno','yymm')) %>% filter(!is.na(sd))
+#the weights of each asset in “2012-03”
+sample1=spread(sd_change[,c('permno','yymm','wgt')],permno,wgt)
+sample1[,'14888']=0
+sample1[which(sample1$yymm=='2012-03'),]
+```
+
+### (b) Plot your index performance in year 2013 together with the index performance built based on Equal Weighted and Value-Weighted.
+```{r}
+#Risk-parity Investment
+crsp.sample=crsp.sample %>% group_by(permno,yymm) %>%
+  arrange(date) %>% mutate(cumret=cumprod(ret+1)) %>%
+  mutate(pri=cumret*wgt) %>% ungroup()
+pri=crsp.sample %>% select(permno,date,yymm,pri)
+pri=pri %>% group_by(date) %>%
+  summarise(cum=sum(pri),yymm=first(yymm)) %>% filter(date>='2013-01-01' & date<='2013-12-31')
+pri=pri %>% group_by(yymm) %>% mutate(ret=cum/lag(cum,1)-1) %>% ungroup() %>%
+  mutate(ret=ifelse(is.na(ret),cum-1,ret)) %>%
+  arrange(date) %>% mutate(ret=cumprod(ret+1))
+#Equal weighted
+handle=function(x){
+  x=x %>% mutate(date=as.character(date)) %>%
+    mutate(yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>%
+    arrange(date) %>% mutate(cumret=cumprod(ret+1)) %>% ungroup()
+  x.ew=x %>% group_by(date) %>%
+    summarise(ew=mean(cumret),yymm=first(yymm)) %>% ungroup()
+  x.ew=x.ew %>% group_by(yymm) %>%
+    arrange(date) %>% mutate(ret=ew/lag(ew,1)-1) %>% ungroup()
+  x.ew=x.ew %>% mutate(ret=ifelse(is.na(ret),ew-1,ret)) %>%
+    select(date,ret,yymm)
+  return(x.ew)
+}
+load('/Users/zhangdi/FIN 3380/L2/ret.all.rdata')
+crsp.sample=ret.all
+crsp.sample=crsp.sample %>% select(permno,date,ret)
+crsp.sample=crsp.sample %>% filter(permno!=14888)
+crsp.sample.wide=spread (crsp.sample,key=permno,value=ret)
+crsp.sample=gather(crsp.sample.wide,key=permno,value=ret,-date)
+crsp.sample=crsp.sample %>% mutate(ret=ifelse(is.na(ret),0,ret))
+crsp.sample=crsp.sample %>% filter(date>='2012-01-01') %>% select(date,permno,ret)
+crsp.sample=handle(crsp.sample)
+crsp.sample=crsp.sample %>% filter(date>='2013-01-01' & date<='2013-12-31')
+crsp.sample=crsp.sample %>% mutate(cumret=cumprod(ret+1))
+eq=crsp.sample
+#Value weighted
+load('/Users/zhangdi/FIN 3380/L2/six_stocks.RData')
+crsp.sample=ret.all
+crsp.sample = crsp.sample %>% 
+  mutate(me=prc*shrout) %>% 
+  select(permno,date,ret,me) %>%
+  mutate(permno=as.character(permno))
+crsp.ret = spread(crsp.sample[,c("permno","date","ret")],permno,ret)
+crsp.ret = gather(crsp.ret,key=permno,value=ret,-date)
+crsp.ret = crsp.ret %>% mutate(ret=ifelse(is.na(ret),0,ret))
+crsp.me = crsp.sample %>% select(permno,date,me)
+crsp.sample = crsp.ret %>% left_join(crsp.me,by=c("permno","date"))
+crsp.vw = crsp.sample %>% 
+  group_by(permno) %>%
+  arrange(date) %>%
+  mutate(lag.me=lag(me,1)) %>% ungroup()
+crsp.vw = crsp.vw %>% 
+  mutate(yymm=substr(date,1,7)) %>%
+  group_by(permno,yymm) %>%
+  arrange(date) %>% 
+  mutate(lag.me=first(lag.me)) %>% ungroup()
+crsp.vw = crsp.vw %>% filter(yymm!=first(yymm))
+crsp.vw = crsp.vw %>% mutate(lag.me=ifelse(is.na(lag.me),0,lag.me))
+crsp.vw = crsp.vw %>% 
+  group_by(date) %>%
+  mutate(wgt=lag.me/sum(lag.me,na.rm=T)) %>%
+  ungroup()
+crsp.vw = crsp.vw %>% 
+  group_by(yymm,permno) %>% 
+  arrange(date) %>%
+  mutate(cumret=cumprod(ret+1)) %>% ungroup()
+crsp.vw = crsp.vw %>% arrange(date,permno)
+crsp.vw = crsp.vw %>% 
+  mutate(vw=wgt*cumret)
+crsp.vw = crsp.vw %>%
+  group_by(date) %>% 
+  summarise(vw=sum(vw),yymm=first(yymm)) %>% ungroup() 
+crsp.vw=crsp.vw %>% group_by(yymm) %>% arrange(date) %>% mutate(ret=vw/lag(vw,1)-1) %>% ungroup() 
+crsp.vw.2013 = crsp.vw %>% filter(date>='2013-01-01' & date<='2013-12-31')
+crsp.vw.2013=crsp.vw.2013 %>% arrange(date) %>% mutate(ret=ifelse(is.na(ret),vw-1,ret))%>% mutate(vw=cumprod(ret+1))
+#in the same chart
+yrange=range(c(pri$ret,eq$cumret,crsp.vw.2013$vw))
+plot(pri$ret~as.Date(pri$date),type='l',ylab='ret',xlab='date',main='Index',ylim=yrange)
+lines(eq$cumret~as.Date(eq$date),col='red')
+lines(crsp.vw.2013$vw~as.Date(crsp.vw.2013$date),col='blue')
+legend("topleft",c("Risk-parity Investment","EW","VW"),col=c("black","red","blue"),lty=c(1,1,1))
+```
+
+
+## Q3
+### (a) Write the variance of the portfolio with 6 stocks as a function of these 6 stocks’ weights (denoted as w1,w2,…, w6), variances (denoted as σ21,σ22,…, σ26) and covariances (denoted as σ1,2,σ1,3,...,σ5,6).
+$\sigma_{p}^2=w_{1}^2\sigma_{1}^2+w_{2}^2\sigma_{2}^2+w_{3}^2\sigma_{3}^2+w_{4}^2\sigma_{4}^2+w_{5}^2\sigma_{5}^2+w_{6}^2\sigma_{6}^2+2w_{ 1 }w_{ 2 }\sigma_{ 1 , 2 }+2w_{ 1 }w_{ 3 }\sigma_{ 1 , 3 }+2w_{ 1 }w_{ 4 }\sigma_{ 1,4 }+2w_{ 1 }w_{ 5 }\sigma_{ 1 , 5 }+2w_{ 1 }w_{ 6 }\sigma_{ 1 , 6 }$
+$+2w_{ 2 }w_{ 3 }\sigma_{ 2 , 3 }+2w_{ 2 }w_{ 4 }\sigma_{ 2 , 4 }+2w_{ 2 }w_{ 5 }\sigma_{ 2 , 5 }+2w_{ 2 }w_{ 6 }\sigma_{ 2 , 6 }++2w_{ 3 }w_{ 4 }\sigma_{ 3 , 4 }+2w_{ 3 }w_{ 5 }\sigma_{ 3 , 5 }+2w_{ 3 }w_{ 6 }\sigma_{ 3 , 6 }+2w_{ 4 }w_{ 5 }\sigma_{ 4 , 5 }+2w_{ 4 }w_{ 6 }\sigma_{ 4 , 6 }+2w_{ 5 }w_{ 6 }\sigma_{ 5 , 6 }$
+
+### (b) Calculate the variance of your portfolio using the function you write and calculate the variance using the matrix format.
+#### 1) Using the function wrote
+```{r}
+load('/Users/zhangdi/FIN 3380/L2/ret.all.rdata')
+wgt.all=data.frame(ticker=c("AAPL","MSFT","IBM","BABA","GE","KO"),wgt=c(0.1,0.2,0.15,0.25,0.1,0.2))
+tickers=data.frame(ticker=c("AAPL","BABA","GE","IBM","KO","MSFT"),permno=c(14593,14888,12060,12490,11308,10107))
+ret.all = merge(ret.all,tickers,by.x="permno",by.y="permno",all.x=T, all.y = T)
+ret.all = ret.all %>% select(-permno)
+ret.all = spread(ret.all,"ticker","ret")
+ret.all = ret.all[complete.cases(ret.all),]
+cov.m = cov(ret.all[,2:ncol(ret.all)])
+cov.m = cov.m * 252
+print(cov.m)
+wgt.all = wgt.all[order(wgt.all$ticker),]
+print(wgt.all)
+sigma_p=0
+for(i in 1:6){
+  for (j in 1:6){
+    sigma_p=sigma_p+wgt.all$wgt[i]*wgt.all$wgt[j]*cov.m[i,j]
+  }
+}
+cat('The variance using function formula is ',sigma_p)
+```
+
+#### 2) Using matrix format
+```{r}
+wgt=matrix(wgt.all$wgt,1)
+sigma_p=wgt %*% cov.m %*% t(wgt)
+cat('The variance using matrix formula is ',sigma_p)
+```
+
+## Q4
+### load the data and check
+```{r}
+load('/Users/zhangdi/FIN 3380/Homework/HW3/crsp.sample.rdata')
+crsp.sample=crsp.sample %>% filter(permno==39731 | permno==79089 | permno==83148) %>%
+  arrange(date) %>% filter(date>='2017-01-01' & date<='2018-12-31')
+crsp.sample$prc=ifelse(crsp.sample$prc<0,-crsp.sample$prc,crsp.sample$prc)
+tmp.summary = crsp.sample %>% group_by(permno) %>% summarise(n=n())
+summary(crsp.sample)
+tmp.summary
+```
+
+### (a) Calculate their daily average return, standard deviation, covariance and correlation.
+```{r}
+#daily average return
+daily_return=crsp.sample %>% select(permno,date,ret) %>% group_by(permno) %>%
+  arrange(date) %>% summarise(average_return=mean(ret))
+print(daily_return)
+#daily standard deviation
+sd=crsp.sample %>% select(permno,date,ret) %>% group_by(permno) %>%
+  arrange(date) %>% summarise(standard_deviation=sd(ret))
+print(sd)
+#daily covariance
+covariance=crsp.sample %>% select(permno,date,ret)
+covariance=spread(covariance,permno,ret) %>% arrange(date)
+covariance=cov(covariance[,2:4])
+cat('The covariance of 39731 and 79089 is ',covariance[1,2],'.The covariance of 39731 and 83148 is ',covariance[1,3],'.The covariance of 79089 and 83148 is ',covariance[2,3],'.','\n')
+#daily correlation
+correlation=crsp.sample %>% select(permno,date,ret)
+correlation=spread(correlation,permno,ret) %>% arrange(date)
+correlation=cor(correlation[,2:4])
+cat('The correlation of 39731 and 79089 is ',correlation[1,2],'.The correlation of 39731 and 83148 is ',correlation[1,3],'.The correlation of 79089 and 83148 is ',correlation[2,3],'.','\n')
+```
+
+### (b) Annualize the results in a assuming in each year, there are 252 days.
+```{r}
+#annualize return
+daily_return$average_return=daily_return$average_return*252
+print(daily_return)
+#annualize standard deviation
+sd$standard_deviation=sd$standard_deviation*sqrt(252)
+print(sd)
+#annualize covariance
+covariance=covariance*252
+cat('The covariance of 39731 and 79089 is ',covariance[1,2],'.The covariance of 39731 and 83148 is ',covariance[1,3],'.The covariance of 79089 and 83148 is ',covariance[2,3],'.','\n')
+#annualize correlation
+cat('The correlation of 39731 and 79089 is ',correlation[1,2],'.The correlation of 39731 and 83148 is ',correlation[1,3],'.The correlation of 79089 and 83148 is ',correlation[2,3],'.','\n')
+```
+
+### (c) Calculate your portfolio annulized standard deviation and annulized average return, Present your result for the following weights combindation: weights (39731,79089,83148)=(0.4,0.2,0.4) and weights(39731,79089,83148)=c(0.8,0.1,0.1).
+```{r}
+ef=data.frame()
+x=0
+for (i in seq(0,1,0.01)){
+  y=1-i
+  for (j in seq(0,y,0.01)){
+    x=x+1
+    c=1-i-j
+    ef[x,1]=i
+    ef[x,2]=j
+    ef[x,3]=c
+  }
+}
+ef[,3]=round(ef[,3],2)
+names(ef)=c('wgt.39731','wgt.79089','wgt.83148')
+#annualized average return using their returns
+ef=ef %>% mutate(annualized_return=wgt.39731*daily_return$average_return[1]+wgt.79089*daily_return$average_return[2]+wgt.83148*daily_return$average_return[3])
+#annualized portfolio standard deviation
+ef=ef %>% mutate(var=wgt.39731*wgt.39731*covariance[1,1]+wgt.79089*wgt.79089*covariance[2,2]+wgt.83148*wgt.83148*covariance[3,3]+2*wgt.39731*wgt.79089*covariance[1,2]+2*wgt.39731*wgt.83148*covariance[1,3]+2*wgt.79089*wgt.83148*covariance[2,3])
+ef=ef %>% mutate(sd=sqrt(var))
+ef$var=NULL
+#weights combindation: weights (39731,79089,83148)=(0.4,0.2,0.4)
+sample1=ef %>% filter(wgt.39731==0.4 & wgt.79089==0.2 &wgt.83148==0.4)
+print(sample1)
+#weights combindation: weights (39731,79089,83148)=(0.8,0.1,0.1)
+sample1=ef %>% filter(wgt.39731==0.8 & wgt.79089==0.1 &wgt.83148==0.1)
+print(sample1)
+```
+
+### (d) Round the standard deviation and average return to 3 digits for each portfolio, and construct the efficient frontier using the rounded results. Plot your efficient frontier from these three assets.
+```{r}
+ef$annualized_return=round(ef$annualized_return,3)
+ef$sd=round(ef$sd,3)
+ef_sum=ef %>% select(annualized_return,sd) %>% group_by(annualized_return) %>%
+  summarise(sd=min(sd))
+plot(ef_sum$annualized_return~ef_sum$sd,type='l',ylab='portfolio return',xlab='portfolio Std',main='Efficient frontier')
+```
+
+### (e) Assuming the risk free rate is 0. What is the portfolio allocation that gives you the highest sharpe ratio?
+```{r}
+ef=ef %>% mutate(sr=annualized_return/sd)
+allocation=ef[which(ef$sr==max(ef$sr)),]
+print(allocation)
+```
+

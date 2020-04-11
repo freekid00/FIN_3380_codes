@@ -1,0 +1,196 @@
+---
+title: "Homework_1"
+author: "Di Zhang 118020518"
+date: "9/8/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Q1:perform data check on the DJ Index data.
+## read DJ Index data:
+```{r}
+dj=read.csv('/Users/zhangdi/FIN 3380/Homework/HW1/dj.csv')
+dj$X=NULL
+print(head(dj))
+```
+
+### performing data check:
+#### Plot the dji
+```{r,echo=T,eval=T}
+plot(dj$dji~dj$date,type='l',ylab='dji',xlab='date',main='DJ Index')
+```
+
+#### Check the dimention of data:
+```{r}
+print(dim(dj))
+```
+
+#### Outputing summary statistics:
+```{r}
+print(summary(dj))
+```
+##### from the summary, we can see there is a data problem: the min of dji is 0 and there is one NA.
+##### use a package.
+```{r,echo=T,eval=T}
+library(dplyr)
+library(zoo)
+```
+
+##### so we use basic data manipulation to fix the data problem.
+```{r}
+dj=dj[-which(dj$dji==0),]
+dj=dj %>% arrange(date) %>%
+  filter(!is.na(dji))
+print(summary(dj))
+```
+
+
+# Q2
+## (A) use Logarithmic return
+### read AAPL & MSFT
+```{r}
+aapl=read.csv('/Users/zhangdi/FIN 3380/Homework/HW1/aapl.csv')
+msft=read.csv('/Users/zhangdi/FIN 3380/Homework/HW1/msft.csv')
+aapl$X=NULL
+msft$X=NULL
+print(head(aapl))
+print(head(msft))
+```
+
+#### calculate return of aapl
+```{r}
+aaplret=aapl %>% select(date,prc) %>%
+  arrange(date) %>%
+  mutate(prc.lag=lag(prc,1)) %>%
+  mutate(return1=prc/prc.lag) %>%
+  mutate(aaplret=log(return1)) %>%
+  select(date,aaplret)
+aaplret$date=as.Date(aaplret$date)
+print(head(aaplret))
+```
+
+#### calculate return of msft
+```{r}
+msftret=msft %>% select(date,prc) %>%
+  arrange(date) %>%
+  mutate(prc.lag=lag(prc,1)) %>%
+  mutate(return1=prc/prc.lag) %>%
+  mutate(msftret=log(return1)) %>%
+  select(date,msftret)
+msftret$date=as.Date(msftret$date)
+print(head(msftret))
+```
+
+#### merge aapl and msft
+```{r}
+msft.aapl=aaplret %>% inner_join(msftret,by="date")
+print(head(msft.aapl))
+```
+
+#### relative performance
+```{r}
+msft.aapl=msft.aapl %>% mutate(msft.aapl.ret=msftret-aaplret)
+print(summary(msft.aapl$msft.aapl.ret))
+```
+
+#### cumulative performance
+```{r}
+msft.aapl=msft.aapl %>% arrange(date) %>%
+  filter(!is.na(msft.aapl.ret)) %>%
+  mutate(cumret=cumprod(msft.aapl.ret+1))
+plot(msft.aapl$cumret~as.Date(msft.aapl$date),type='l',ylab='return',xlab='date',main='Long MSFT Short AAPL (log)')
+```
+
+#### performance by using arithmatic method
+```{r}
+arith.aaplret=aapl %>% select(date,prc) %>%
+  arrange(date) %>%
+  mutate(prc.lag=lag(prc,1)) %>%
+  mutate(arith.aaplret=prc/prc.lag-1) %>%
+  select(date,arith.aaplret)
+arith.aaplret$date=as.Date(arith.aaplret$date)
+arith.msftret=msft %>% select(date,prc) %>%
+  arrange(date) %>%
+  mutate(prc.lag=lag(prc,1)) %>%
+  mutate(arith.msftret=prc/prc.lag-1) %>%
+  select(date,arith.msftret)
+arith.msftret$date=as.Date(arith.msftret$date)
+arith.msft.aapl=arith.aaplret %>% inner_join(arith.msftret,by="date")
+arith.msft.aapl=arith.msft.aapl %>% mutate(arith.msft.aapl.ret=arith.msftret-arith.aaplret) %>%
+  filter(!is.na(arith.msft.aapl.ret)) %>%
+  mutate(cumret=cumprod(arith.msft.aapl.ret+1))
+plot(arith.msft.aapl$cumret~as.Date(arith.msft.aapl$date),type='l',ylab='return',xlab='date',main='arithmetic return')
+```
+
+#### difference between logarithmic and average:
+```{r}
+dif=data.frame('date'=arith.msft.aapl$date,'log.ret'=msft.aapl$cumret,'arith.ret'=arith.msft.aapl$cumret)
+dif=dif %>% mutate(difference=dif$log.ret-dif$arith.ret)
+plot(dif$difference~as.Date(dif$date),type='l',ylab='difference',xlab='date',main='difference')
+```
+
+#### Conclusion: the total return using logarithmic returns is almost the same as the total return using arithmetic returns since the difference is less than 0.007.
+
+## (B) plot two lines on the same chart
+```{r}
+aaplret=aaplret %>% arrange(date) %>%
+  filter(!is.na(aaplret)) %>%
+  mutate(aaplcumret=cumprod(aaplret+1))
+msftret=msftret %>% arrange(date) %>%
+  filter(!is.na(msftret)) %>%
+  mutate(msftcumret=cumprod(msftret+1))
+plot(msftret$msftcumret~as.Date(msftret$date),col='blue',type='l',ylab='return',xlab='date',main='return of AAPL and MSFT')
+lines(aaplret$aaplcumret~as.Date(aaplret$date),col='red')
+legend('topleft',c('AAPL','MSFT'),lty=c(1,1),col=c('red','blue'))
+```
+
+## (C) Amend the stategy
+#### insert a new column
+```{r}
+msft.aapl=msft.aapl %>% arrange(date) %>%
+  mutate(mysignal=ifelse(msft.aapl.ret>0,1,-1))
+```
+
+#### if the signal of the last day is 1, the return of today is the same as the original one, if the signal of the last day is -1, the return of today is the opposite number of the original one.
+```{r}
+msft.aapl=msft.aapl %>% arrange(date) %>%
+  mutate(newsignal=lag(mysignal,1))
+msft.aapl$newsignal[1]=1
+msft.aapl=msft.aapl %>% arrange(date) %>%
+  mutate(newret=msft.aapl.ret*newsignal) %>%
+  mutate(newcum=cumprod(newret+1))
+plot(msft.aapl$newcum~as.Date(msft.aapl$date),type='l',ylab='return',xlab='date',main='New Strategy')
+```
+
+#### conclusion: The new strategy is good at the middle of the whole period cause the return is larger than 1.4 at most of time, but at last the total return is 1.27, less than 1.37, so at last it is not so good.
+
+# Q3
+#### Function: return a dataframe with 4 columns as in the sample in class: that is prc, avg, sd2up, sd2down
+```{r}
+Bollinger_Band=function(x,window) {
+  bb=data.frame(x)
+  bb=bb %>% mutate(avg=rollmean(x,k=window,fill=NA,align='right'),
+                   sd=rollapply(x,width=window,FUN=sd,na.rm=T,fill=NA,align='right')) %>%
+    mutate(sd2up=avg+2*sd,sd2down=avg-2*sd) %>%
+    select(x,avg,sd2up,sd2down)
+  return(bb)
+}
+```
+
+#### Apply the function to MSFT with a window of 15 days. Plot results on MSFT.
+```{r}
+bb=Bollinger_Band(msft$prc,15)
+bb['date']=msft$date
+bb$date=as.Date(bb$date)
+bb=bb %>% filter(!is.na(bb$avg))
+plot(bb$x~bb$date,type='l',ylab='price',xlab='date',main='MSFT: Bollinger Band')
+lines(bb$avg~bb$date,col='blue')
+lines(bb$sd2up~bb$date,col='red')
+lines(bb$sd2down~bb$date,col='red')
+```
+

@@ -1,0 +1,246 @@
+---
+title: "Function"
+author: "Di Zhang  118020518"
+date: "10/17/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(RPostgres)
+library(zoo)
+library(ggplot2)
+```
+
+# long A and short B
+```{r}
+ls=function(a,b){
+  a=a %>% select(date,prc) %>% mutate(date=as.Date(date),aret=prc/lag(prc,1)-1)
+  b=b %>% select(date,prc) %>% mutate(date=as.Date(date),bret=prc/lag(prc,1)-1)
+  ab=a %>% inner_join(b,by='date')
+  ab=ab %>% filter(!is.na(aret)) %>% arrange(date) %>% mutate(ret=aret-bret,cum=cumprod(ret+1))
+  return(ab)
+}
+
+msft=read.csv('/Users/zhangdi/FIN 3380/L1/msft.csv')
+aapl=read.csv('/Users/zhangdi/FIN 3380/L1/aapl.csv')
+ab=ls(msft,aapl)
+plot(ab$cum~as.Date(ab$date),type='l',ylab='ret',xlab='date',main='long and short')
+```
+
+# sma
+```{r}
+sma50200=function(a){
+  a=a %>% select(date,prc) %>% arrange(date) %>%
+    mutate(date=as.Date(date),sma50=rollmean(prc,k=50,fill=NA,align='right'),sma200=rollmean(prc,k=200,fill=NA,align='right')) %>%
+    filter(!is.na(sma200))
+  return(a)
+}
+
+a=read.csv('/Users/zhangdi/FIN 3380/L1/aapl.csv')
+a=sma50200(a)
+a=a %>% filter(date>='2016-01-01')
+plot(a$prc~a$date,type='l',ylab='prc',xlab='date',main='sma')
+lines(a$sma50~a$date,col='red')
+lines(a$sma200~a$date,col='blue')
+legend('topleft',c('prc','sma50','sma200'),lty=c(1,1,1),col=c('black','red','blue'))
+```
+
+# bollinger band
+```{r}
+bb=function(a){
+  a=a %>% select(date,prc) %>% arrange(date) %>% 
+    mutate(date=as.Date(date),avg=rollmean(prc,k=20,fill=NA,align='right')) %>% 
+    mutate(sd=rollapply(prc,width=20,fill=NA,align='right',FUN=sd,na.rm=T)) %>% filter(!is.na(avg)) %>% mutate(up=avg+2*sd,down=avg-2*sd)
+  return(a)
+}
+
+a=read.csv('/Users/zhangdi/FIN 3380/L1/aapl.csv')
+a=bb(a)
+a=a %>% filter(substr(date,1,4)=='2016')
+plot(a$prc~a$date,type='l',ylab='prc',xlab='date',main='bb',ylim=range(a[,c('prc','up','down')]))
+lines(a$avg~a$date,col='blue')
+lines(a$up~a$date,col='red')
+lines(a$down~a$date,col='red')
+legend('bottomright',c('prc','avg','up','down'),lty=c(1,1,1,1),col=c('black','blue','red','red'))
+```
+
+# rsi
+```{r}
+rsi=function(a){
+  a=a %>% select(date,prc) %>% arrange(date) %>% mutate(delta=prc-lag(prc,1),up=ifelse(delta>0,1,0),down=ifelse(delta<0,1,0)) %>%
+    mutate(up=delta*up,down=-delta*down) %>%     mutate(upa=rollmean(up,k=14,fill=NA,align='right',na.rm=T),downa=rollmean(down,k=14,fill=NA,align='right',na.rm=T))
+  for (t in 15:length(a$date)){
+    a$upa[t]=a$upa[t-1]*13/14+a$up[t]/14
+    a$downa[t]=a$downa[t-1]*13/14+a$down[t]/14
+  }
+  a=a %>% mutate(rs=upa/downa) %>% mutate(rsi=100-100/(1+rs))
+  return(a)
+}
+
+a=read.csv('/Users/zhangdi/FIN 3380/L1/aapl.csv')
+a=rsi(a)
+a=a %>% filter(substr(date,1,4)=='2016')
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi',ylim=c(0,100))
+abline(h=c(30,70),col='red')
+```
+
+#equal weighted 
+```{r}
+eq=function(a){
+  a=a %>% select(permno,date,ret) %>% mutate(date=as.Date(date),yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>% arrange(date) %>%
+    mutate(cum=cumprod(ret+1)) %>% ungroup() %>% group_by(date) %>% summarise(cum=mean(cum),yymm=first(yymm)) %>% ungroup()
+  return(a)
+}
+eq.m=function(a){
+  a=a %>% group_by(yymm) %>% mutate(ret=cum/lag(cum)-1) %>% mutate(ret=ifelse(is.na(ret),cum-1,ret)) %>% ungroup() %>%
+    arrange(date) %>% mutate(cum=cumprod(ret+1))
+  return(a)
+}
+
+load('/Users/zhangdi/FIN 3380/L2/crsp.sample.RData')
+a=crsp.sample
+a=eq(a)
+a=eq.m(a)
+p=a %>% ggplot(aes(x=as.Date(date),y=cum))+geom_line()+labs(x='date',y='cum',title='eq')+theme_bw()
+print(p)
+```
+
+# value weighted
+```{r}
+vw=function(a){
+  a=a %>% mutate(date=as.Date(date),yymm=substr(date,1,7)) %>% group_by(permno) %>% arrange(date) %>%
+    mutate(eq=prc*shrout,eq1=lag(eq,1)) %>% filter(!is.na(eq1)) %>% ungroup() %>%
+    group_by(permno,yymm) %>% arrange(date) %>% mutate(eq=first(eq1),cum=cumprod(ret+1)) %>% ungroup() %>% 
+    group_by(date) %>% mutate(wgt=eq/sum(eq),ret=wgt*cum) %>% summarise(cum=sum(ret),yymm=first(yymm)) %>% ungroup()
+    return(a)
+}
+vwy=function(a){
+  a=a %>% group_by(yymm) %>% mutate(ret=cum/lag(cum,1)-1,ret=ifelse(is.na(ret),cum-1,ret)) %>% ungroup() %>%
+    mutate(cum=cumprod(ret+1))
+  return(a)
+}
+
+load('/Users/zhangdi/FIN 3380/L2/crsp.sample.RData')
+a=crsp.sample
+a=vw(a)
+a=vwy(a)
+p=a %>% ggplot(aes(x=date,y=cum))+geom_line()+labs(x='date',y='cum')+theme_bw()
+print(p)
+```
+
+# portfolio risk
+```{r}
+## mystock only contains permno(>1),date,prc
+## sd for all and year (do not filter NA)
+sd1=function(a){
+  a=a %>% group_by(permno) %>% mutate(date=as.Date(date),ret=prc/lag(prc,1)-1,sd=sd(ret,na.rm=T)) %>% ungroup() %>%
+    mutate(yy=substr(date,1,4)) %>% group_by(permno,yy) %>% summarise(sdy=sd(ret,na.rm=T),sd=first(sd)) %>% ungroup()
+  return(a)
+}
+
+load('/Users/zhangdi/FIN 3380/L2/mystock.RData')
+a=mystock
+a=sd1(a)
+
+## multiple stocks
+ms=function(a,b){
+  a=a %>% group_by(permno) %>% arrange(date) %>% mutate(ret=prc/lag(prc,1)-1,ret=ifelse(is.na(ret),0,ret)) %>% ungroup() %>%
+    select(permno,date,ret)
+  a=merge(a,b,by.x='permno',by.y='permno',all.x=T,all.y='T')
+  a=a[complete.cases(a),]
+  a$permno=NULL
+  a=spread(a,ticker,ret)
+  a=cov(a[,2:ncol(a)])*252
+  return(a)
+}
+
+load('/Users/zhangdi/FIN 3380/L2/stock.id.RData')
+load('/Users/zhangdi/FIN 3380/L2/mystock.RData')
+a=mystock
+b=stock.id
+a=ms(a,b)
+wgt= data.frame(ticker=c("AAPL","MSFT","IBM","BABA","GE","KO"),wgt = c(0.15,0.2,0.1,0.25,0.1,0.2))
+wgt=wgt[order(wgt$ticker),]
+wgt=matrix(wgt$wgt,1)
+p.sd=sqrt(wgt %*% a %*% t(wgt))
+p.sd
+```
+
+# stock and bond return (efficient frontier part)
+```{r}
+load('/Users/zhangdi/FIN 3380/L2/eq.bond.RData')
+names(eq.bond)=c('date','x','y','rf')
+a=eq.bond
+
+ef=function(a){
+  xret=mean(a$x)*12
+  yret=mean(a$y)*12
+  xsd=sd(a$x)*sqrt(12)
+  ysd=sd(a$y)*sqrt(12)
+  xy=cor(a$x,a$y)
+  ef=data.frame(w1=seq(0,1,0.01),w2=seq(1,0,-0.01))
+  ef=ef %>% mutate(ret=w1*xret+w2*yret,sd=sqrt(w1^2*xsd^2+w2^2*ysd^2+2*w1*w2*xsd*ysd*xy))
+  return(ef)
+}
+
+a=ef(a)
+plot(a$ret~a$sd,type='l',ylab='ret',xlab='sd')
+gmv=a[which(a$sd==min(a$sd)),c('sd','ret')]
+points(gmv,pch=19,col='red')
+```
+
+# investing globally
+```{r}
+load('/Users/zhangdi/FIN 3380/L2/ind.g.RData')
+load('/Users/zhangdi/FIN 3380/L2/ind.g.price.RData')
+names(ind.g.price)=c('permno','date','prc')
+names(ind.g)=c('conm','permno','tic')
+a=ind.g.price
+b=ind.g
+
+handle=function(a,b){
+  a=a %>% mutate(date=as.Date(date),yy=substr(date,1,4)) %>% group_by(permno,yy) %>% arrange(date) %>%summarise(prc=last(prc)) %>%
+    ungroup() %>% group_by(permno) %>% arrange(yy) %>% mutate(ret=prc/lag(prc)-1) %>% filter(!is.na(ret)) %>% ungroup()
+  a=a %>% left_join(b,by='permno')
+  return(a)
+}
+
+a=handle(a,b)
+p=a %>% ggplot(aes(x=as.Date(yy,'%Y'),y=ret,color=tic))+geom_line()+theme_bw()+labs(y='ret',x='year')
+print(p)
+
+a=a %>% filter(tic %in% unique(tic)[1:4])
+p=a %>% ggplot(aes(x=as.Date(yy,'%Y'),y=ret,color=tic))+geom_line()+theme_bw()+labs(y='ret',x='year')
+print(p)
+
+handle2=function(a){
+  a=a %>% group_by(permno) %>% arrange(yy) %>% mutate(cum=cumprod(ret+1)) %>% ungroup()
+  return(a)
+}
+a=handle2(a)
+p=a %>% ggplot(aes(x=as.Date(yy,'%Y'),y=cum,color=tic))+geom_line()+labs(x='year',y='cum')+theme_bw()
+print(p)
+
+load('/Users/zhangdi/FIN 3380/L2/ind.g.RData')
+load('/Users/zhangdi/FIN 3380/L2/ind.g.price.RData')
+names(ind.g.price)=c('permno','date','prc')
+names(ind.g)=c('conm','permno','tic')
+a=ind.g.price
+b=ind.g
+a=handle(a,b)
+a=a %>% select(yy,tic,ret)
+a=spread(a,tic,ret)
+a=a %>% select(-yy)
+a=as.matrix(a)
+library(fPortfolio)
+a=as.timeSeries(a)
+ef=portfolioFrontier(data=a)
+tailoredFrontierPlot(ef,risk='Sigma',twoAssets=FALSE,sharpeRatio = FALSE)
+```
+

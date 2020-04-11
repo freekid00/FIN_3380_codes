@@ -1,0 +1,174 @@
+---
+title: "revise3"
+author: "Di Zhang  118020518"
+date: "10/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# hw1
+```{r}
+library(dplyr)
+library(tidyr)
+library(RPostgres)
+library(zoo)
+library(ggplot2)
+msft=read.csv('/Users/zhangdi/FIN 3380/L1/msft.csv')
+aapl=read.csv('/Users/zhangdi/FIN 3380/L1/aapl.csv')
+m=msft
+a=aapl
+m=m %>% select(date,prc) %>% arrange(date) %>% mutate(mret=log(prc/lag(prc,1)))
+a=a %>% select(date,prc) %>% arrange(date) %>% mutate(aret=log(prc/lag(prc,1)))
+am=a %>% left_join(m,by='date') %>% arrange(date) %>% mutate(ret=mret-aret) %>% filter(!is.na(ret)) %>%
+  mutate(cum=cumprod(ret+1)) 
+p=am %>% ggplot(aes(x=as.Date(date),y=cum))+geom_line()+labs(x='date',y='cum')+theme_bw()
+print(p)
+m=m %>% filter(!is.na(mret)) %>% arrange(date) %>% mutate(mcum=cumprod(mret+1))
+a=a %>% filter(!is.na(aret)) %>% arrange(date) %>% mutate(acum=cumprod(aret+1))
+yrange=range(m$mcum,a$acum)
+plot(a$acum~as.Date(a$date),type='l',ylab='cum',xlab='date',main='p',ylim=yrange)
+lines(m$mcum~as.Date(m$date),col='red')
+m=m %>% select(date,mret)
+a=a %>% select(date,aret)
+am=a %>% inner_join(m,by='date') %>% mutate(delta=mret-aret,sign=ifelse(delta>0,1,-1)) %>% arrange(date) %>%
+  mutate(sign=lag(sign,1)) %>% filter(!is.na(sign)) %>% mutate(delta=delta*sign,cum=cumprod(delta+1))
+plot(am$cum~as.Date(am$date),type='l',ylab='cum',xlab='date',main='new strategy')
+```
+
+# hw2
+```{r}
+a=read.csv('/Users/zhangdi/FIN 3380/Homework/HW2/dj.csv')
+a=a %>% mutate(date=as.Date(date)) %>% filter(date>='1985-01-01'&date<='2007-12-31')
+a=a %>% mutate(delta=dji-lag(dji,1),up=ifelse(delta>0,1,0),down=ifelse(delta<0,1,0))  %>%
+  mutate(up=up*delta,down=-delta*down) %>% 
+  mutate(upavg=rollapply(up,width=7,fill=NA,align='right',FUN=mean,na.rm=T),
+         downavg=rollapply(down,width=7,fill=NA,align='right',FUN=mean,na.rm=T)) 
+for (t in 8:length(a$up)){
+  a$upavg[t]=a$upavg[t-1]*6/7+a$up[t]/7
+  a$downavg[t]=a$downavg[t-1]*6/7+a$down[t]/7
+}
+a=a %>% mutate(rs=upavg/downavg,rsi=100-100/(1+rs)) 
+plot(a$rsi~as.Date(a$date),type='l',ylab='rsi',xlab='date',main='rsi')
+abline(h=c(30,70),col='red')
+a=a %>% mutate(above=ifelse(rsi>=70,1,0))
+above=sum(a$above,na.rm=T)
+above
+a=a %>% mutate(rsi1=lag(rsi,1),buy=ifelse(rsi>=30&rsi1<30,1,0),
+               buy=ifelse(is.na(buy),0,buy),ret=lead(dji,1)/dji-1,
+               buy=buy*ret,cum=cumprod(buy+1))
+plot(a$cum~as.Date(a$date),type='l',ylab='cum',xlab='date')
+
+load('/Users/zhangdi/FIN 3380/Homework/HW2/crsp.sample.RData')
+a=crsp.sample
+# equal weighted
+a=a %>% select(permno,date,ret) %>% mutate(date=as.Date(date),yyqq=as.yearqtr(date)) %>%
+  group_by(permno,yyqq) %>% mutate(cum=cumprod(ret+1)) %>% ungroup() %>%
+  group_by(date) %>% summarise(cum=mean(cum),yyqq=first(yyqq))
+a.2012=a %>% filter(yyqq=='2012 Q1')
+plot(a.2012$cum~as.Date(a.2012$date),type='l',ylab='cum',xlab='date')
+a=a %>% group_by(yyqq) %>% arrange(date) %>%
+  mutate(ret=cum/lag(cum,1)-1,ret=ifelse(is.na(ret),cum-1,ret)) %>% ungroup() %>%
+  arrange(date) %>% mutate(cum=cumprod(ret+1))
+plot(a$cum~as.Date(a$date),type='l',ylab='cum',xlab='date')
+# value weighted
+load('/Users/zhangdi/FIN 3380/Homework/HW2/crsp.sample.RData')
+a=crsp.sample
+a=a %>% mutate(date=as.Date(date),yyqq=as.yearqtr(date)) %>%
+  group_by(permno) %>% mutate(me=prc*shrout,me=lag(me,1)) %>% ungroup() %>% filter(!is.na(me)) %>%
+  group_by(permno,yyqq) %>% mutate(cum=cumprod(ret+1),me=first(me)) %>% ungroup() %>%
+  group_by(date) %>% mutate(wgt=me/sum(me),cum=cum*wgt) %>% summarise(cum=sum(cum),yyqq=first(yyqq))
+a.2012=a %>% filter(yyqq=='2012 Q1')
+plot(a.2012$cum~as.Date(a.2012$date),type='l',ylab='cum',xlab='date')
+a=a %>% group_by(yyqq) %>% arrange(date) %>% mutate(ret=cum/lag(cum,1)-1,ret=ifelse(is.na(ret),cum-1,ret)) %>%
+  ungroup() %>% mutate(cum=cumprod(ret+1))
+plot(a$cum~as.Date(a$date),type='l',ylab='cum',xlab='date')
+
+load('/Users/zhangdi/FIN 3380/Homework/HW2/crsp.sample2.RData')
+a=crsp.sample2
+a=a %>% select(date,permno,ret) %>% group_by(permno) %>% arrange(date) %>%
+  summarise(date=date[which(!is.na(ret))[1]])
+a
+a=crsp.sample2
+a1=a %>% filter(date>='2010-01-04'&date<'2012-01-03') 
+a2=a %>% filter(date>='2012-01-03')
+a1=a1 %>% mutate(date=as.Date(date),yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>% arrange(date) %>%
+  mutate(cum=cumprod(ret+1)) %>% ungroup() %>% group_by(date) %>% summarise(cum=mean(cum),yymm=first(yymm)) %>%
+  ungroup()
+a2=a2 %>% mutate(date=as.Date(date),yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>% arrange(date) %>%
+  mutate(cum=cumprod(ret+1)) %>% ungroup() %>% group_by(date) %>% summarise(cum=mean(cum),yymm=first(yymm)) %>%
+  ungroup()
+a=rbind(a1,a2)
+a2013=a %>% filter(yymm=='2013-01')
+p=a2013 %>% ggplot(aes(x=as.Date(date),y=cum))+geom_line()+labs(x='date',y='cum')+theme_bw()
+print(p)
+```
+
+# hw3
+```{r}
+load('/Users/zhangdi/FIN 3380/L2/ret.all.rdata')
+a=ret.all
+a=a %>% mutate(date=as.Date(date),yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>% arrange(date) %>%
+  mutate(sd=sd(ret),cum=cumprod(ret+1)) %>% ungroup() %>%
+  group_by(permno) %>% mutate(sd=lag(sd,1)) %>% filter(!is.na(sd)) %>% ungroup() %>%
+  group_by(permno,yymm) %>% mutate(sd=first(sd)) %>% ungroup() %>%
+  group_by(date) %>% mutate(wgt=(1/sd)/sum(1/sd),cum=cum*wgt) %>%summarise(cum=sum(cum),yymm=first(yymm)) %>%
+  ungroup()
+a=a %>% filter(substr(date,1,4)=='2013')
+a=a %>% group_by(yymm) %>% arrange(date) %>% mutate(ret=cum/lag(cum,1)-1,ret=ifelse(is.na(ret),cum-1,ret)) %>%
+  ungroup() %>% mutate(cum=cumprod(ret+1))
+plot(a$cum~as.Date(a$date),type='l',ylab='cum',xlab='date')
+
+load('/Users/zhangdi/FIN 3380/L2/ret.all.rdata')
+b=data.frame(ticker=c("AAPL","MSFT","IBM","BABA","GE","KO"),wgt=c(0.1,0.2,0.15,0.25,0.1,0.2))
+tickers=data.frame(ticker=c("AAPL","BABA","GE","IBM","KO","MSFT"),permno=c(14593,14888,12060,12490,11308,10107))
+a=ret.all %>% left_join(tickers,by='permno')
+a=a %>% select(ticker,date,ret) %>% arrange(date) %>% spread(ticker,ret) 
+a=a[complete.cases(a),]
+a=cov(a[,2:ncol(a)])*252
+b=b[order(b$ticker),]
+b=matrix(b$wgt,1)
+p=b %*% a %*% t(b)
+p
+
+load('/Users/zhangdi/FIN 3380/Homework/HW3/crsp.sample.rdata')
+a=crsp.sample
+a=a %>% select(permno,date,ret) %>% filter(permno==39731|permno==79089|permno==83148) %>%
+  filter(date>='2017-01-01'&date<='2018-12-31')
+a=spread(a,permno,ret)
+a=a[complete.cases(a),]
+avg3=mean(a$`39731`)*252
+avg7=mean(a$`79089`)*252
+avg8=mean(a$`83148`)*252
+sd3=sd(a$`39731`)*sqrt(252)
+sd7=sd(a$`79089`)*sqrt(252)
+sd8=sd(a$`83148`)*sqrt(252)
+c37=cov(a[,2],a[,3])*252
+c38=cov(a[,2],a[,4])*252
+c78=cov(a[,3],a[,4])*252
+ef=data.frame()
+t=0
+for(i in seq(0,1,0.01)){
+  for (j in seq(0,1-i,0.01)){
+    t=t+1
+    ef[t,1]=i
+    ef[t,2]=j
+    ef[t,3]=1-i-j
+  }
+}
+names(ef)=c('w1','w2','w3')
+ef=ef %>% mutate(ret=w1*avg3+w2*avg7+w3*avg8,
+                 sd=sqrt(w1^2*sd3^2+w2^2*sd7^2+w3^2*sd8^2+2*w1*w2*c37+2*w1*w3*c38+2*w2*w3*c78),
+                 ret=round(ret,3),sd=round(sd,3)) %>%
+  group_by(ret) %>% summarise(sd=min(sd)) %>% ungroup()
+plot(ef$ret~ef$sd,type='l')
+a=a %>% select(-date)
+a=as.matrix(a)
+library(fPortfolio)
+a=timeSeries(a)
+ef=portfolioFrontier(data=a)
+tailoredFrontierPlot(object = ef,risk='Sigma',twoAssets = FALSE,sharpeRatio = FALSE)
+```
+

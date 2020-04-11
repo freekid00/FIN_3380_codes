@@ -1,0 +1,68 @@
+---
+title: "factor model"
+author: "Di Zhang  118020518"
+date: "12/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L4")
+load('crsp.roll.RData')
+cr=crsp.roll
+library(dplyr)
+cr=cr %>% filter(date<'2011-01-01')
+head(cr)
+```
+
+```{r}
+ff=read.csv('ff_daily.csv',skip=4)
+ff=ff %>% na.omit()
+ff=ff %>% mutate(date=as.Date(X,'%Y%m%d'))
+names(ff)=c('1','mktrf','smb','hml','rf','date')
+ff=ff %>% select(date,rf,mktrf,smb,hml) %>% filter(date<'2011-01-01')
+cr=cr %>% left_join(ff,by='date') %>% mutate(ret_rf=ret-rf) %>% select(permno,date,ret_rf,mktrf,smb,hml) %>% 
+  mutate_at(vars(mktrf,smb,hml),~./100)
+head(cr)
+```
+
+```{r}
+stock1=cr %>% filter(permno==first(permno))
+library(tibbletime)
+stock1=as_tibble(stock1)
+roll.LM=rollify(.f=function(ret_rf,mktrf,smb,hml){
+  lm(ret_rf~mktrf+smb+hml)
+},window=252,unlist=FALSE)
+stock1=stock1 %>% mutate(model=roll.LM(ret_rf,mktrf,smb,hml)) %>% slice(-1:-251) %>% select(permno,date,model)
+head(stock1)
+```
+
+```{r}
+library(broom)
+library(purrr)
+library(tidyr)
+stock1=stock1 %>% mutate(model=map(model,tidy)) %>% unnest(model)
+head(stock1)
+```
+
+```{r}
+crl=cr %>% group_by(permno) %>% arrange(date) %>% mutate(model=roll.LM(ret_rf,mktrf,smb,hml)) %>% slice(-1:-251) %>% select(permno,date,model) %>%
+  mutate(model=map(model,tidy)) %>% unnest(model) %>% ungroup()
+library(ggplot2)
+crl$permno=as.factor(crl$permno)
+p=crl %>% ggplot(aes(date,estimate,color=permno))+geom_line()+theme_bw()+facet_wrap(facets=~term)
+print(p)
+head(crl)
+```
+
+```{r}
+library(zoo)
+crl=crl %>% mutate(yymm=as.yearmon(date)) %>% group_by(permno,yymm,term) %>% summarise(beta=mean(estimate)) %>% ungroup()
+crl=crl %>% group_by(permno,term) %>% arrange(yymm) %>% mutate(lag.beta=dplyr::lag(beta,1)) %>% na.omit() %>%
+  summarise(cor=cor(beta,lag.beta))
+spread(crl,permno,cor)
+```
+

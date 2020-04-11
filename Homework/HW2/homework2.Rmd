@@ -1,0 +1,251 @@
+---
+title: "Homework2"
+author: "Di Zhang  118020518"
+date: "9/19/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Q1
+#### load dj.csv
+```{r}
+dj=read.csv("/Users/zhangdi/FIN 3380/Homework/HW2/dj.csv")
+print(head(dj))
+```
+
+#### (a) Subset your data to dates between 1985-01-01 and 2007-12-31.
+```{r}
+dj$date=as.Date(dj$date)
+dj=dj[dj$date>='1985-01-01' & dj$date<='2007-12-31',]
+print(head(dj))
+```
+
+#### (b) Construct a 7 day RSI for your DJ data
+```{r}
+library(dplyr)
+library(zoo)
+dj=dj %>% mutate(delta=dji-lag(dji,1)) %>%
+  mutate(up=ifelse(delta>0,1,0),down=ifelse(delta<0,1,0)) %>%
+  mutate(up.value=delta*up,down.value=-delta*down) %>%
+  mutate(up.avg=rollapply(up.value,width=7,align='right',fill=NA,FUN=mean,na.rm=T),
+         down.avg=rollapply(down.value,width=7,align='right',fill=NA,FUN=mean,na.rm=T))
+for(t in 8:length(dj$up.avg)){
+  dj$up.avg[t]=dj$up.avg[t-1]*6/7+dj$up.value[t]*1/7
+  dj$down.avg[t]=dj$down.avg[t-1]*6/7+dj$down.value[t]*1/7
+}
+dj=dj %>% mutate(rs=up.avg/down.avg) %>%
+  mutate(rsi=100-100/(1+rs))
+plot(dj$rsi~dj$date,type='l',ylab='rsi',xlab='date',main='RSI')
+abline(h=c(30,70),col='red')
+```
+
+#### (c) How many days in total that the RSI is above or equal 70? How many days in total that the RSI is below or equal 30?
+```{r}
+i=0
+j=0
+for (t in 7:length(dj$rsi)){
+  if (dj$rsi[t]>=70){
+    i=i+1
+  } else if (dj$rsi[t]<=30){
+    j=j+1
+  }
+}
+cat('the RSI is above or equal 70: ',i,'\n')
+cat('the RSI is below or equal 30: ',j)
+```
+
+#### (d) buy the stock if yesterday’s RSI < 30 but today’s RSI >=30.
+```{r}
+dj=dj %>% mutate(new.rsi=lag(rsi,1),ret=dji/lag(dji,1)-1) 
+dj=dj %>% filter(rsi>=30 & new.rsi<30)
+dj=dj %>% mutate(cumret=cumprod(dj$ret+1))
+cat('cumulative return is: ',dj$cumret[length(dj$cumret)])
+```
+
+## Q2
+#### (a) Equal-weighted index with quarterly reallocation
+##### load data
+```{r}
+load('/Users/zhangdi/FIN 3380/Homework/HW2/crsp.sample.RData')
+crsp.sample=crsp.sample %>% select(permno,date,ret)
+print(head(crsp.sample,5))
+```
+
+##### Format returns so that on each date, there are equal number of stocks in the portfolio.
+```{r}
+library(tidyr)
+tmp.summary=crsp.sample %>% group_by(permno) %>% summarise(n=n())
+tmp.summary
+crsp.sample.wide=spread (crsp.sample,key=permno,value=ret)
+crsp.sample=gather(crsp.sample.wide,key=permno,value=ret,-date)
+tmp.summary=crsp.sample %>% group_by(permno) %>% summarise(n=n())
+tmp.summary
+```
+
+##### Calculate the cumulative returns of each stock in each quarter
+```{r}
+crsp.sample=crsp.sample %>% mutate(ret=ifelse(is.na(ret),0,ret)) %>%
+  mutate(yyqq=as.yearqtr(date)) %>%
+  group_by(permno,yyqq) %>%
+  arrange(date) %>%
+  mutate(cumret=cumprod(ret+1)) %>% ungroup()
+print(head(crsp.sample,5))
+```
+
+##### the EW portfolio index cumulative return is the simple average of cumulative return of all stocks
+```{r}
+crsp.ew=crsp.sample %>% group_by(date) %>%
+  summarise(ew=mean(cumret),yyqq=first(yyqq)) %>% ungroup()
+head(crsp.ew,5)
+```
+
+##### the first quarter of 2012
+```{r}
+crsp.ew.2012=crsp.ew %>% filter(yyqq=='2012 Q1')
+plot(crsp.ew.2012$ew~as.Date(crsp.ew.2012$date),type='l',ylab='ew.ret',xlab='date',main='Equal weighted index 2012 Q1')
+```
+
+##### cumulative index performance over the entire trading periods.
+```{r}
+crsp.ew=crsp.ew %>% 
+  group_by(yyqq) %>%
+  arrange(date) %>%
+  mutate(ret=ew/lag(ew,1)-1) %>% ungroup()
+crsp.ew=crsp.ew %>% 
+  mutate(ret=ifelse(is.na(ret),ew-1,ret))
+crsp.ew=crsp.ew %>% 
+  arrange(date) %>%
+  mutate(ew.all=cumprod(ret+1))
+plot(crsp.ew$ew.all~as.Date(crsp.ew$date),type='l',ylab='ew.ret',xlab='date',main='Equal weighted index during the whole period')
+```
+
+#### (b) Repeat a. to construct Value-weighted index with quarterly reallocation
+##### Grab all stocks’ daily returns, close prices and shares outstanding and calculate market cap
+```{r}
+load('/Users/zhangdi/FIN 3380/Homework/HW2/crsp.sample.RData')
+crsp.sample$prc=abs(crsp.sample$prc)
+crsp.sample=crsp.sample %>% 
+  mutate(me=prc*shrout) %>%
+  select(permno,date,ret,me)  %>%
+  mutate(permno=as.character(permno))
+crsp.ret=spread(crsp.sample[,c('permno','date','ret'),],permno,ret)
+crsp.ret=gather(crsp.ret,key=permno,value=ret,-date)
+crsp.ret=crsp.ret %>% mutate(ret=ifelse(is.na(ret),0,ret)) 
+crsp.me=crsp.sample %>% select(permno,date,me)
+crsp.sample=crsp.ret %>% left_join(crsp.me,by=c('permno','date'))
+head(crsp.sample)
+```
+
+##### Calculate the market cap for weighing at the beginning of each quarter.
+```{r}
+crsp.vw=crsp.sample %>% group_by(permno) %>%
+  arrange(date) %>%
+  mutate(lag.me=lag(me,1)) %>% ungroup()
+crsp.vw=crsp.vw %>% mutate(yyqq=as.yearqtr(date)) %>%
+  group_by(permno,yyqq) %>%
+  arrange(date) %>%
+  mutate(lag.me=first(lag.me)) %>% ungroup()
+head(crsp.vw)
+crsp.vw=crsp.vw %>% filter(yyqq!=first(yyqq))
+crsp.vw=crsp.vw %>% mutate(lag.me=ifelse(is.na(lag.me),0,lag.me))
+head(crsp.vw)
+```
+
+##### Calculate the wgt of each stock using lag.me/sum(lag.me)
+```{r}
+crsp.vw=crsp.vw %>% group_by(date) %>%
+  mutate(wgt=lag.me/sum(lag.me,na.rm=T)) %>%
+  ungroup()
+head(crsp.vw)
+```
+
+##### calculate the cumulative returns of each stock
+```{r}
+crsp.vw=crsp.vw %>%
+  group_by(yyqq,permno) %>%
+  arrange(date) %>%
+  mutate(cumret=cumprod(ret+1)) %>% ungroup()
+crsp.vw=crsp.vw %>% arrange(date,permno)
+head(crsp.vw)
+```
+
+##### The Value-Weighted index is sum(wgt(i)*cumret(i))
+```{r}
+crsp.vw=crsp.vw %>%
+  mutate(vw=wgt*cumret)
+head(crsp.vw)
+crsp.vw=crsp.vw %>% group_by(date) %>%
+  summarise(vw=sum(vw),yyqq=first(yyqq))
+head(crsp.vw)
+```
+
+##### Plot your index cumulative return on first quarter of 2012
+```{r}
+crsp.vw.2012.q1=crsp.vw %>% filter(yyqq=='2012 Q1')
+head(crsp.vw.2012.q1)
+plot(crsp.vw.2012.q1$vw~as.Date(crsp.vw.2012.q1$date),type='l',ylab='vw',xlab='date',main='Value Weighted Index 2012 Q1')
+```
+
+##### cumulative return over the all period
+```{r}
+crsp.vw=crsp.vw %>% group_by(yyqq) %>%
+  arrange(date) %>%
+  mutate(ret=vw/lag(vw,1)-1) %>% ungroup()
+head(crsp.vw)
+crsp.vw=crsp.vw %>% mutate(ret=ifelse(is.na(ret),0,ret))
+crsp.vw=crsp.vw %>% arrange(date) %>% mutate(vw.all=cumprod(ret+1))
+plot(crsp.vw$vw.all~as.Date(crsp.vw$date),type='l',ylab='vw.id',xlab='date',main='Value Weighted Index')
+```
+
+## Q3
+#### (a) When is the first date that each stock start to have return data?
+```{r}
+load('/Users/zhangdi/FIN 3380/Homework/HW2/crsp.sample2.RData')
+crsp.sample2=crsp.sample2 %>% arrange(permno,date)
+crsp.sample2.ret=crsp.sample2 %>% select(permno,date,ret)
+crsp.sample2.ret=crsp.sample2.ret %>%
+  group_by(permno) %>% summarise(retdate=first(date)) %>% ungroup()
+crsp.sample2=spread(crsp.sample2[,c('permno','date','ret'),],permno,ret)
+crsp.sample2=gather(crsp.sample2,key=permno,value=ret,-date)
+crsp.sample2=crsp.sample2 %>% mutate(ret=ifelse(is.na(ret),0,ret)) 
+print(crsp.sample2)
+print(crsp.sample2.ret)
+```
+
+#### (b) Plot the cumulative return of your index in 2013-01 and 2011-01.
+```{r}
+data1=crsp.sample2 %>% filter(date<'2012-01-03' & date>='2010-01-04') %>%
+  filter(permno!='11601')
+data2=crsp.sample2 %>% filter(date>='2012-01-03')
+handle=function(x){
+  x=x %>% mutate(date=as.character(date)) %>%
+    mutate(yymm=substr(date,1,7)) %>% group_by(permno,yymm) %>%
+    arrange(date) %>% mutate(cumret=cumprod(ret+1)) %>% ungroup()
+  x.ew=x %>% group_by(date) %>%
+    summarise(ew=mean(cumret),yymm=first(yymm)) %>% ungroup()
+  x.ew=x.ew %>% group_by(yymm) %>%
+    arrange(date) %>% mutate(ret=ew/lag(ew,1)-1) %>% ungroup()
+  x.ew=x.ew %>% mutate(ret=ifelse(is.na(ret),0,ret)) %>%
+    select(date,ret,yymm)
+  return(x.ew)
+}
+data1.ew=handle(data1)
+data2.ew=handle(data2)
+data=rbind(data1.ew,data2.ew)
+head(data)
+data=data %>% filter(yymm>='2011-01'& yymm<='2013-01')
+data=data %>% mutate(cumret=cumprod(ret+1))
+plot(data$cumret~as.Date(data$date),type='l',ylab='ret',xlab='date',main='Equal Weighted Index during 2011-01 and 2013-01')
+data=data1.ew %>% filter(yymm=='2011-01')
+data=data %>% mutate(cumret=cumprod(ret+1))
+plot(data$cumret~as.Date(data$date),type='l',ylab='ret',xlab='date',main='Equal Weighted Index in 2011-01')
+data=data2.ew  %>% filter(yymm=='2013-01')
+data=data %>% mutate(cumret=cumprod(ret+1))
+plot(data$cumret~as.Date(data$date),type='l',ylab='ret',xlab='date',main='Equal Weighted Index in 2013-01')
+```
+

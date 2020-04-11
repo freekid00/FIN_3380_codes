@@ -1,0 +1,217 @@
+---
+title: "HW5"
+author: "Di Zhang  118020518"
+date: "11/14/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Q1 
+#### data handling
+```{r}
+load('/Users/zhangdi/FIN 3380/L4/nflx.RData')
+load('/Users/zhangdi/FIN 3380/L4/sp500.RData')
+library(dplyr)
+library(tidyr)
+library(zoo)
+sp500=sp500 %>% mutate(mkt=sp500/lag(sp500,1)-1) %>% na.omit()
+a=nflx
+names(a)=c('date','ret','prc')
+ff=read.csv('/Users/zhangdi/FIN 3380/L4/ff_daily.csv',skip=4)
+names(ff)=c('date','mkt.rf','smb','hml','rf')
+ff$date=as.Date(ff$date,'%Y%m%d')
+ff=ff %>% mutate_at(vars(mkt.rf,smb,hml,rf),~./100) %>% na.omit()
+a=a %>% left_join(ff,by='date') %>% left_join(sp500,by='date') 
+a$mkt.rf=NULL
+a$sp500=NULL
+a$prc=NULL
+```
+
+### Q1(a) Simple excess return model
+```{r}
+a_re=a %>% filter(date<='2013-01-23')
+a_pre=a %>% filter(date>='2013-01-24'&date<='2013-07-23')
+regression=lm(a_re$ret~a_re$mkt,data=a_re)
+intercept=regression$coefficients[1]
+r=regression$coefficients[2]
+a_pre$predict=intercept+r*a_pre$mkt
+a_pre$difference=a_pre$ret-a_pre$predict
+t.test(a_pre$difference,mu=0)
+cat('The P-value is 0.2646, which is not statistically significant.')
+```
+
+### Q1(b) CAPM model
+```{r}
+a_re=a %>% filter(date<='2013-01-23')
+a_pre=a %>% filter(date>='2013-01-24'&date<='2013-07-23')
+a_re=a_re %>% mutate(ret.rf=ret-rf,mkt.rf=mkt-rf)
+a_pre=a_pre %>% mutate(ret.rf=ret-rf,mkt.rf=mkt-rf)
+regression=lm(a_re$ret.rf~a_re$mkt.rf)
+intercept=regression$coefficients[1]
+r=regression$coefficients[2]
+a_pre$predict=intercept+r*a_pre$mkt.rf+a_pre$rf
+a_pre$difference=a_pre$ret-a_pre$predict
+t.test(a_pre$difference,mu=0,alternative = 'two.sided')
+cat('The P-value is 0.2646, which is not statistically significant.')
+```
+
+### Q1(c) Fama French 3 Factor Model
+```{r}
+a_re=a %>% filter(date<='2013-01-23')
+a_pre=a %>% filter(date>='2013-01-24'&date<='2013-07-23')
+a_re=a_re %>% mutate(ret.rf=ret-rf,mkt.rf=mkt-rf)
+a_pre=a_pre %>% mutate(ret.rf=ret-rf,mkt.rf=mkt-rf)
+regression=lm(a_re$ret.rf~a_re$mkt.rf+a_re$smb+a_re$hml)
+intercept=regression$coefficients[1]
+beta1=regression$coefficients[2]
+beta2=regression$coefficients[3]
+beta3=regression$coefficients[4]
+a_pre$predict=intercept+beta1*a_pre$mkt.rf+beta2*a_pre$smb+beta3*a_pre$hml+a_pre$rf
+a_pre$difference=a_pre$ret-a_pre$predict
+t.test(a_pre$difference,mu=0)
+cat('The P-value is 0.2969, which is not statistically significant.')
+```
+
+
+# Q2 
+#### get data for (a)
+```{r}
+data=read.csv('/Users/zhangdi/FIN 3380/Homework/HW5/Portfolios_Formed_on_ME.csv',skip=12,
+              stringsAsFactors = FALSE)
+data=data %>% select(X,Lo.10,Hi.10)
+for (i in 1:nrow(data)){
+  data$X[i]=paste0(substr(data$X[i],1,4),'-',substr(data$X[i],5,6))
+  if (substr(data$Lo.10[i],4,4)=='-'){
+    data$Lo.10[i]=substr(data$Lo.10[i],4,8)
+  }else {
+    data$Lo.10[i]=substr(data$Lo.10[i],5,8)
+  }
+  if (substr(data$Hi.10[i],4,4)=='-'){
+    data$Hi.10[i]=substr(data$Hi.10[i],4,8)
+  }else {
+    data$Hi.10[i]=substr(data$Hi.10[i],5,8)
+  }
+}
+data=data %>% mutate_at(vars(Lo.10,Hi.10),~as.numeric(.)) %>%
+  mutate_at(vars(Lo.10,Hi.10),~./100) %>% na.omit()
+names(data)=c('date','Lo.10','Hi.10')
+data$date=as.yearmon(data$date)
+data=data %>% filter(date>='Jan 1996' & date<='Dec 2015')
+ff=read.csv('/Users/zhangdi/FIN 3380/Homework/HW5/F-F_Research_Data_Factors.csv',skip=3,
+            stringsAsFactors = FALSE)
+ff=ff[1:1119,]
+names(ff)=c('date','mkt.rf','smb','hml','rf') 
+for (i in 1:nrow(ff)){
+  ff$date[i]=paste0(substr(ff$date[i],1,4),'-',substr(ff$date[i],5,6))
+  if (substr(ff$mkt.rf[i],4,4)=='-'){
+    ff$mkt.rf[i]=substr(ff$mkt.rf[i],4,8)
+  }else {
+    ff$mkt.rf[i]=substr(ff$mkt.rf[i],5,8)
+  }
+  if (substr(ff$smb[i],4,4)=='-'){
+    ff$smb[i]=substr(ff$smb[i],4,8)
+  }else {
+    ff$smb[i]=substr(ff$smb[i],5,8)
+  }
+  if (substr(ff$hml[i],4,4)=='-'){
+    ff$hml[i]=substr(ff$hml[i],4,8)
+  }else {
+    ff$hml[i]=substr(ff$hml[i],5,8)
+  }
+  if (substr(ff$rf[i],4,4)=='-'){
+    ff$rf[i]=substr(ff$rf[i],4,8)
+  }else {
+    ff$rf[i]=substr(ff$rf[i],5,8)
+  }
+}
+ff$date=as.yearmon(ff$date)
+ff=ff %>% filter(date >='Jan 1996' &date<='Dec 2015')
+ff=ff %>% mutate_at(vars(mkt.rf,smb,hml,rf),~as.numeric(.)) %>%
+  mutate_at(vars(mkt.rf,smb,hml,rf),~./100) %>% na.omit() %>% select(date,mkt.rf,rf)
+ab=data %>% inner_join(ff,by='date') %>% mutate_at(vars(Lo.10,Hi.10),list(rf=~.-rf)) %>%
+  select(date,Lo.10_rf,Hi.10_rf,mkt.rf)
+```
+
+### Q2(a)
+```{r}
+win=36
+library(tibbletime)
+Roll.Lm=rollify(.f=function(a,b){
+  lm(a~b)
+  },
+  window=win,unlist=FALSE)
+ab=as_tibble(ab)
+ab=ab %>% mutate(modelone=Roll.Lm(Lo.10_rf,mkt.rf),modeltwo=Roll.Lm(Hi.10_rf,mkt.rf)) %>%
+  select(date,modelone,modeltwo) %>% slice(-1:-35)
+library(broom)
+library(purrr)
+ab=ab %>% mutate(modelone=map(modelone,tidy),modeltwo=map(modeltwo,tidy))
+ab=ab %>% unnest(c(modelone,modeltwo),names_repair='minimal')
+names(ab)=c('date','term','estimate1','s11','s12','p1','term2','estimate2','s21','s22','p2')
+ab=ab %>% select(date,term,estimate1,estimate2)
+ab=ab %>% mutate(dif=estimate1-estimate2)
+intercept=ab[which(ab$term=='(Intercept)'),]
+t.test(intercept$dif,mu=0,alternative='greater')
+beta=ab[which(ab$term=='b'),]
+t.test(beta$dif,mu=0,alternative='greater')
+cat('The intercept of Lo,10 is higher than value of Hi.10.')
+cat('This is out of my expection.')
+cat('That is because the Hi.10 consists ten largest market cap stocks, their stock prices are quite stable, their returns fluctuate less than Lo.10')
+```
+
+### Q2(b)
+```{r}
+usrec=read.csv('/Users/zhangdi/FIN 3380/Homework/HW5/USREC.csv',stringsAsFactors = F)
+names(usrec)=c('date','usrec')
+usrec=usrec %>% mutate(date=as.Date(date),month=as.yearmon(substr(date,1,7)))
+me=read.csv('/Users/zhangdi/FIN 3380/Homework/HW5/Portfolios_Formed_on_ME_daily.csv',stringsAsFactors = FALSE ,skip=12)
+me=me %>% select(X,Lo.10,Hi.10)
+names(me)=c('date','Lo.10','Hi.10')
+me$date=as.Date(me$date,'%Y%m%d')
+me$month=as.yearmon(substr(me$date,1,7))
+for (i in 1:nrow(me)){
+  if (substr(me$Lo.10[i],4,4)=='-'){
+    me$Lo.10[i]=substr(me$Lo.10[i],4,8)
+  }else {
+    me$Lo.10[i]=substr(me$Lo.10[i],5,8)
+  }
+  if (substr(me$Hi.10[i],4,4)=='-'){
+    me$Hi.10[i]=substr(me$Hi.10[i],4,8)
+  }else {
+    me$Hi.10[i]=substr(me$Hi.10[i],5,8)
+  }
+}
+me=me %>% mutate_at(vars(Lo.10,Hi.10),~as.numeric(.)/100)
+usrec=usrec %>% filter(date>='1996-01-01'&date<='2015-12-31')
+me=me %>% filter(date>='1996-01-01'&date<='2015-12-31')
+data=merge(me,usrec,by='month',all.x=F,all.y=F)
+L=data %>% select(date.x,month,Lo.10,usrec)
+names(L)=c('date','month','Lo.10','usrec')
+ff=read.csv('/Users/zhangdi/FIN 3380/L4/ff_daily.csv',skip=4)
+names(ff)=c('date','mkt.rf','smb','hml','rf')
+ff$date=as.Date(ff$date,'%Y%m%d')
+ff=ff %>% mutate_at(vars(mkt.rf,smb,hml,rf),~./100) %>% filter((date>='1996-01-01')&(date<='2015-12-31')) %>% na.omit() %>% select(date,mkt.rf,rf)
+L=L %>% left_join(ff,by='date')
+L=L %>% mutate(Lo.10=Lo.10-rf) %>% select(date,month,Lo.10,usrec,mkt.rf)
+L=L %>% group_by(usrec,month) %>% do(model=lm(Lo.10~mkt.rf,data=.)) %>% ungroup()
+L=L %>% mutate(model=map(model,tidy))
+L=L %>% unnest(model)
+L.0alpha=L[which((L$usrec==0)&(L$term=='(Intercept)')),]
+L.1alpha=L[which((L$usrec==1)&(L$term=='(Intercept)')),]
+t.test(L.0alpha$estimate,L.1alpha$estimate,alt="two", var.equal = F)
+cat('So the alpha is not different','\n')
+H=data %>% select(date.x,month,Hi.10,usrec)
+names(H)=c('date','month','Hi.10','usrec')
+H=H %>% left_join(ff,by='date') %>% mutate(Hi.10=Hi.10-rf) %>% select(date,month,Hi.10,usrec,mkt.rf)
+H=H %>% group_by(usrec,month) %>% do(model=lm(Hi.10~mkt.rf,data=.)) %>% ungroup()
+H=H %>% mutate(model=map(model,tidy))
+H=H %>% unnest(model)
+H.0alpha=L[which((H$usrec==0)&(H$term=='(Intercept)')),]
+H.1alpha=L[which((H$usrec==1)&(H$term=='(Intercept)')),]
+t.test(H.0alpha$estimate,H.1alpha$estimate)
+cat('So the alpha is not different')
+```
+

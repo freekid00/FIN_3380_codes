@@ -1,0 +1,54 @@
+---
+title: "event study"
+author: "Di Zhang  118020518"
+date: "12/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("/Users/zhangdi/FIN 3380/L4")
+load('nflx.RData')
+names(nflx)=c('date','ret','prc')
+library(dplyr)
+nflx=nflx %>% select(date,ret)
+head(nflx)
+```
+
+```{r}
+load('sp500.RData')
+sp500=sp500 %>% mutate(mkt=sp500/lag(sp500,1)-1) %>% na.omit() %>% select(date,mkt)
+head(sp500)
+```
+
+```{r}
+ff=read.csv('ff_daily.csv',skip=4)
+names(ff)=c('date','mktrf','smb','hml','rf')
+ff=ff %>% mutate(date=as.Date(date,"%Y%m%d")) %>% mutate_at(vars(rf),~./100) %>% select(date,rf)
+head(ff)
+```
+
+```{r}
+nflx=nflx %>% left_join(sp500,by='date') %>% left_join(ff,by='date')
+nflx=nflx %>% mutate_at(vars(ret,mkt),list(mrf=~.-rf)) %>% select(date,ret_mrf,mkt_mrf)
+usedata=nflx %>% filter(date<'2013-07-23')
+capm=lm(usedata$ret_mrf~usedata$mkt_mrf)
+testdata=nflx %>% filter(date=='2013-07-23')
+testdata=testdata %>% mutate(pred=capm$coefficients[1]+capm$coefficients[2]*mkt_mrf,res=ret_mrf-pred,tstat=res/summary(capm)$sigma,
+                             p=2*(1-pt(abs(tstat),df=nrow(usedata-2))))
+testdata
+```
+
+```{r}
+nflx[order(-abs(nflx$ret_mrf)),]
+usedata=nflx %>% filter(date<'2013-07-23'&abs(ret_mrf)<quantile(abs(ret_mrf),probs=0.99,type=3))
+capm=lm(usedata$ret_mrf~usedata$mkt_mrf)
+testdata=nflx %>% filter(date=='2013-07-23')
+testdata =testdata %>% mutate(pred=capm$coefficients[1]+capm$coefficients[2]*mkt_mrf,res=ret_mrf-pred,
+                              tstat=res/summary(capm)$sigma,p=2*(1-pt(abs(tstat),df=nrow(usedata)-2)))
+testdata
+```
+
